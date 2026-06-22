@@ -31,6 +31,17 @@ pub struct DetailData {
 }
 
 #[derive(Debug, Clone)]
+pub struct SearchPreview {
+    pub symbol: String,
+    pub name: String,
+    pub kind: String,
+    pub currency: String,
+    pub in_portfolio: bool,
+    pub price: rust_decimal::Decimal,
+    pub day_change_pct: rust_decimal::Decimal,
+}
+
+#[derive(Debug, Clone)]
 pub struct SearchResultRow {
     pub symbol: String,
     pub name: String,
