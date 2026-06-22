@@ -8,54 +8,33 @@
 
 **Tech Stack:** Rust, ratatui 0.28, crossterm, serde JSON config, embedded locale bundles (no external i18n crate).
 
-**Out of scope (this plan):** Settings screen, `GetConfig`/`UpdateConfig` IPC, charts, Add Transaction modal, daemon validation fixes.
+**Out of scope (this plan):** Settings screen, `GetConfig`/`UpdateConfig` IPC.
 
 ---
 
-## Phase 1 — Foundation (this branch)
+## Phase 1 — Foundation — DONE
 
-### Task 1: Locale in config — DONE (PR #2)
-
-### Task 2: i18n bundles — DONE (PR #2)
-
-### Task 3: Number formatting — DONE (PR #2)
-
-### Task 4: TUI app shell — DONE (PR #2)
-
-### Task 5: Search & Ledger stubs — DONE (PR #2)
-
-### Task 6: Screen decomposition — DONE (PR #3)
-
-Each screen module owns its `render`, `handle_key`, and (for Search) `tick`:
-
-```
-src/tui/
-  mod.rs          — thin event loop
-  models.rs       — shared row types
-  state.rs        — UiData
-  input.rs        — KeyOutcome
-  screens/
-    mod.rs        — dispatch render / keys / tick
-    portfolio.rs
-    detail.rs
-    search.rs
-    ledger.rs
-```
-
-`views.rs` removed.
+All tasks shipped in PRs #2–#3 (i18n, formatting, screen stack, decomposition).
 
 ---
 
-## Phase 2 — Core flows (follow-up PRs)
+## Phase 2 — Core flows
 
 | Order | Feature | Status |
 |-------|---------|--------|
 | 1 | Add Transaction modal | DONE (PR #4) |
 | 2 | Search with live provider + preview | DONE (PR #5) |
-| 3 | Ledger full CRUD + delete confirm | pending |
+| 3 | Ledger delete + confirm (`d`) | DONE (PR #6) — create via modal (`a`); **edit (U) not implemented** |
 | 4 | Sort portfolio by score (`o`) | DONE |
-| 5 | Braille chart on Detail | pending |
-| 6 | Daemon: oversell reject, delete recompute | Independent |
+| 5 | Braille chart on Detail | **PR open** — branch `cursor/detail-braille-chart-e195` not merged to `main` yet |
+| 6a | Daemon: delete → recompute snapshot | DONE (PR #6) |
+| 6b | Daemon: reject oversell on `AddTransaction` | **Pending** — spec gap, not a crash bug (see below) |
+
+### Oversell reject — bug or feature gap?
+
+The design spec requires rejecting sells above held quantity. `core::pnl` already returns `PnlError::Oversell`, but `AddTransaction` **persists the trade first** and only logs a warning if `recompute_asset` fails. The API still returns `{"id": …}`.
+
+This is an **implementation gap vs. the spec** (data integrity), not a runtime crash. A user can end up with an invalid ledger row and a stale/missing snapshot. Fixing it means validating before insert (or rolling back in a transaction) and returning `BadRequest` to CLI/TUI.
 
 ---
 
@@ -65,6 +44,8 @@ src/tui/
 - Command palette (`Ctrl+P`)
 - Import/Export in TUI
 - Dashboard as separate screen
+- Ledger edit transaction (completes CRUD **U**)
+- Fix `tests/e2e.rs` hang (daemon stdout pipe)
 
 ---
 
