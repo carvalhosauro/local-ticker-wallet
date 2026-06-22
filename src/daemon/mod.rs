@@ -1,3 +1,4 @@
+pub mod market_hours;
 pub mod poller;
 pub mod recompute;
 pub mod server;
@@ -39,16 +40,12 @@ pub async fn run(cfg: Config) -> anyhow::Result<()> {
     loop {
         let (stream, _) = listener.accept().await?;
         let (db, chain, cfg) = (db.clone(), chain.clone(), cfg.clone());
-        // Connections are handled inline rather than via `tokio::spawn`.
-        // `server::handle` holds the `tokio::sync::MutexGuard<Db>` across `.await`
-        // points (network calls in RefreshNow/Search), and `Db` is `!Sync`
-        // (rusqlite `Connection` wraps a `RefCell`), so that guard is `!Send` and
-        // the resulting future cannot satisfy `tokio::spawn`'s `Send` bound. The
-        // single SQLite connection behind the mutex already serializes all DB
-        // access, so per-connection spawning would add no real concurrency for the
-        // DB-bound work. `handle_conn` itself is not `Send`, hence it is awaited
-        // here instead of spawned.
-        handle_conn(stream, db, chain, cfg).await;
+        // The Db guard is never held across an `.await` (network I/O happens
+        // outside the lock), so the per-connection future is `Send` and can be
+        // spawned; DB access is still serialized by the single `Mutex`.
+        tokio::spawn(async move {
+            handle_conn(stream, db, chain, cfg).await;
+        });
     }
 }
 
@@ -65,10 +62,7 @@ async fn handle_conn(
             Ok(r) => r,
             Err(_) => continue,
         };
-        let resp = {
-            let db = db.lock().await;
-            server::handle(&db, &chain, &cfg, req).await
-        };
+        let resp = server::handle(&db, &chain, &cfg, req).await;
         if ipc::write_msg(&mut w, &resp).await.is_err() {
             break;
         }

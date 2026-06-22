@@ -4,6 +4,8 @@ use crate::daemon::recompute::recompute_asset;
 use crate::ipc::{Action, ErrorCode, Request, Response};
 use crate::providers::Chain;
 use crate::storage::db::Db;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 fn snapshot_json(s: &crate::storage::queries::PositionSnapshot) -> serde_json::Value {
     serde_json::json!({
@@ -16,79 +18,96 @@ fn snapshot_json(s: &crate::storage::queries::PositionSnapshot) -> serde_json::V
     })
 }
 
-pub async fn handle(db: &Db, chain: &Chain, cfg: &Config, req: Request) -> Response {
+pub async fn handle(db: &Arc<Mutex<Db>>, chain: &Chain, cfg: &Config, req: Request) -> Response {
     let id = req.id.clone();
     let result: anyhow::Result<serde_json::Value> = match req.action {
         Action::Ping => Ok(serde_json::json!({"pong": true})),
 
-        Action::AddTransaction => (|| {
-            let p = &req.payload;
-            let asset = AssetId::b3(
-                p["symbol"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("symbol required"))?,
-            );
-            let side = match p["side"].as_str() {
-                Some("SELL") => Side::Sell,
-                _ => Side::Buy,
-            };
-            let t = Trade {
-                id: 0,
-                asset: asset.clone(),
-                side,
-                quantity: p["quantity"].as_str().unwrap_or("0").parse()?,
-                price: p["price"].as_str().unwrap_or("0").parse()?,
-                fees: p["fees"].as_str().unwrap_or("0").parse()?,
-                executed_at: chrono::NaiveDate::parse_from_str(
-                    p["executed_at"].as_str().unwrap_or(""),
-                    "%Y-%m-%d",
-                )?,
-                note: p["note"].as_str().map(|s| s.to_string()),
-            };
-            let new_id = db.insert_transaction(&t)?;
-            let _ = recompute_asset(db, &asset, &cfg.score_weights);
-            Ok(serde_json::json!({"id": new_id}))
-        })(),
+        Action::AddTransaction => {
+            // Pure DB work: hold the lock only for the duration of this arm; no
+            // `.await` happens while the guard is alive.
+            let d = db.lock().await;
+            (|| {
+                let p = &req.payload;
+                let asset = AssetId::b3(
+                    p["symbol"]
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("symbol required"))?,
+                );
+                let side = match p["side"].as_str() {
+                    Some("SELL") => Side::Sell,
+                    _ => Side::Buy,
+                };
+                let t = Trade {
+                    id: 0,
+                    asset: asset.clone(),
+                    side,
+                    quantity: p["quantity"].as_str().unwrap_or("0").parse()?,
+                    price: p["price"].as_str().unwrap_or("0").parse()?,
+                    fees: p["fees"].as_str().unwrap_or("0").parse()?,
+                    executed_at: chrono::NaiveDate::parse_from_str(
+                        p["executed_at"].as_str().unwrap_or(""),
+                        "%Y-%m-%d",
+                    )?,
+                    note: p["note"].as_str().map(|s| s.to_string()),
+                };
+                let new_id = d.insert_transaction(&t)?;
+                let _ = recompute_asset(&d, &asset, &cfg.score_weights);
+                Ok(serde_json::json!({"id": new_id}))
+            })()
+        }
 
-        Action::ListTransactions => (|| {
-            let asset = req.payload["symbol"].as_str().map(AssetId::b3);
-            let txs = db.list_transactions(asset.as_ref())?;
-            let arr: Vec<_> = txs
-                .iter()
-                .map(|t| {
-                    serde_json::json!({
-                        "id": t.id, "symbol": t.asset.symbol, "side": match t.side { Side::Buy=>"BUY", Side::Sell=>"SELL" },
-                        "quantity": t.quantity.to_string(), "price": t.price.to_string(), "fees": t.fees.to_string(),
-                        "executed_at": t.executed_at.to_string(), "note": t.note,
+        Action::ListTransactions => {
+            let d = db.lock().await;
+            (|| {
+                let asset = req.payload["symbol"].as_str().map(AssetId::b3);
+                let txs = d.list_transactions(asset.as_ref())?;
+                let arr: Vec<_> = txs
+                    .iter()
+                    .map(|t| {
+                        serde_json::json!({
+                            "id": t.id, "symbol": t.asset.symbol, "side": match t.side { Side::Buy=>"BUY", Side::Sell=>"SELL" },
+                            "quantity": t.quantity.to_string(), "price": t.price.to_string(), "fees": t.fees.to_string(),
+                            "executed_at": t.executed_at.to_string(), "note": t.note,
+                        })
                     })
-                })
-                .collect();
-            Ok(serde_json::json!({"transactions": arr}))
-        })(),
+                    .collect();
+                Ok(serde_json::json!({"transactions": arr}))
+            })()
+        }
 
-        Action::DeleteTransaction => (|| {
-            let id = req.payload["id"]
-                .as_i64()
-                .ok_or_else(|| anyhow::anyhow!("id required"))?;
-            let removed = db.delete_transaction(id)?;
-            Ok(serde_json::json!({"removed": removed}))
-        })(),
+        Action::DeleteTransaction => {
+            let d = db.lock().await;
+            (|| {
+                let tx_id = req.payload["id"]
+                    .as_i64()
+                    .ok_or_else(|| anyhow::anyhow!("id required"))?;
+                let removed = d.delete_transaction(tx_id)?;
+                Ok(serde_json::json!({"removed": removed}))
+            })()
+        }
 
-        Action::GetPositions => (|| {
-            let snaps = db.read_snapshots()?;
-            let arr: Vec<_> = snaps.iter().map(snapshot_json).collect();
-            Ok(serde_json::json!({"positions": arr}))
-        })(),
+        Action::GetPositions => {
+            let d = db.lock().await;
+            (|| {
+                let snaps = d.read_snapshots()?;
+                let arr: Vec<_> = snaps.iter().map(snapshot_json).collect();
+                Ok(serde_json::json!({"positions": arr}))
+            })()
+        }
 
-        Action::GetPositionDetail => (|| {
-            let asset = AssetId::b3(
-                req.payload["symbol"]
-                    .as_str()
-                    .ok_or_else(|| anyhow::anyhow!("symbol required"))?,
-            );
-            let snap = recompute_asset(db, &asset, &cfg.score_weights)?;
-            Ok(snapshot_json(&snap))
-        })(),
+        Action::GetPositionDetail => {
+            let d = db.lock().await;
+            (|| {
+                let asset = AssetId::b3(
+                    req.payload["symbol"]
+                        .as_str()
+                        .ok_or_else(|| anyhow::anyhow!("symbol required"))?,
+                );
+                let snap = recompute_asset(&d, &asset, &cfg.score_weights)?;
+                Ok(snapshot_json(&snap))
+            })()
+        }
 
         Action::RefreshNow => refresh(
             db,
@@ -100,6 +119,7 @@ pub async fn handle(db: &Db, chain: &Chain, cfg: &Config, req: Request) -> Respo
         .map(|n| serde_json::json!({"refreshed": n})),
 
         Action::Search => {
+            // No Db lock: this only does provider network I/O.
             let q = req.payload["query"].as_str().unwrap_or("").to_string();
             match chain.search(&q).await {
                 Ok(assets) => Ok(serde_json::json!({"results": assets})),
@@ -107,15 +127,19 @@ pub async fn handle(db: &Db, chain: &Chain, cfg: &Config, req: Request) -> Respo
             }
         }
 
-        Action::Import => crate::portfolio::import_csv(
-            db,
-            req.payload["path"].as_str().unwrap_or(""),
-            &cfg.score_weights,
-        )
-        .map(|n| serde_json::json!({"imported": n})),
+        Action::Import => {
+            let d = db.lock().await;
+            crate::portfolio::import_csv(
+                &d,
+                req.payload["path"].as_str().unwrap_or(""),
+                &cfg.score_weights,
+            )
+            .map(|n| serde_json::json!({"imported": n}))
+        }
 
         Action::Export => {
-            crate::portfolio::export_csv(db, req.payload["path"].as_str().unwrap_or(""))
+            let d = db.lock().await;
+            crate::portfolio::export_csv(&d, req.payload["path"].as_str().unwrap_or(""))
                 .map(|n| serde_json::json!({"exported": n}))
         }
     };
@@ -127,28 +151,40 @@ pub async fn handle(db: &Db, chain: &Chain, cfg: &Config, req: Request) -> Respo
 }
 
 async fn refresh(
-    db: &Db,
+    db: &Arc<Mutex<Db>>,
     chain: &Chain,
     cfg: &Config,
     only: Option<AssetId>,
 ) -> anyhow::Result<usize> {
+    // Read the target list under a short-lived lock, then drop the guard so all
+    // network I/O below runs without holding the Db mutex.
     let targets = match only {
         Some(a) => vec![a],
-        None => db.distinct_held_assets()?,
+        None => {
+            let d = db.lock().await;
+            d.distinct_held_assets()?
+        }
     };
     let mut n = 0;
     for a in targets {
-        if let Ok(q) = chain.quote(&a).await {
-            db.upsert_quote(&q)?;
+        // Network calls happen with NO Db guard held.
+        let quote = chain.quote(&a).await.ok();
+        let candles = chain.history(&a).await.ok();
+        let dividends = chain.dividends(&a).await.ok();
+
+        // Re-acquire the lock only to persist + recompute.
+        let d = db.lock().await;
+        if let Some(q) = quote {
+            d.upsert_quote(&q)?;
             n += 1;
         }
-        if let Ok(c) = chain.history(&a).await {
-            db.upsert_candles(&a, &c)?;
+        if let Some(c) = candles {
+            d.upsert_candles(&a, &c)?;
         }
-        if let Ok(d) = chain.dividends(&a).await {
-            db.upsert_dividends(&a, &d)?;
+        if let Some(divs) = dividends {
+            d.upsert_dividends(&a, &divs)?;
         }
-        let _ = recompute_asset(db, &a, &cfg.score_weights);
+        let _ = recompute_asset(&d, &a, &cfg.score_weights);
     }
     Ok(n)
 }

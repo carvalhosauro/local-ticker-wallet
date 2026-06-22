@@ -3,10 +3,12 @@ use local_ticker_wallet::daemon::server::handle;
 use local_ticker_wallet::ipc::{Action, Request};
 use local_ticker_wallet::providers::Chain;
 use local_ticker_wallet::storage::db::Db;
+use std::sync::Arc;
+use tokio::sync::Mutex;
 
 #[tokio::test]
 async fn add_then_get_positions_via_handler() {
-    let db = Db::open_in_memory().unwrap();
+    let db = Arc::new(Mutex::new(Db::open_in_memory().unwrap()));
     let chain = Chain::new(vec![]); // no network needed for this path
     let cfg = Config::default();
 
