@@ -2,6 +2,7 @@ pub mod client;
 pub mod config;
 pub mod core;
 pub mod daemon;
+pub mod i18n;
 pub mod ipc;
 pub mod paths;
 pub mod portfolio;
