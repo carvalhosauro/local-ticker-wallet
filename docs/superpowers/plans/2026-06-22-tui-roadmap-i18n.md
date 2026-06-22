@@ -26,15 +26,11 @@ All tasks shipped in PRs #2–#3 (i18n, formatting, screen stack, decomposition)
 | 2 | Search with live provider + preview | DONE (PR #5) |
 | 3 | Ledger delete + confirm (`d`) | DONE (PR #6) — create via modal (`a`); **edit (U) not implemented** |
 | 4 | Sort portfolio by score (`o`) | DONE |
-| 5 | Braille chart on Detail | **PR open** — branch `cursor/detail-braille-chart-e195` not merged to `main` yet |
+| 5 | Braille chart on Detail | DONE (PR #8) |
 | 6a | Daemon: delete → recompute snapshot | DONE (PR #6) |
-| 6b | Daemon: reject oversell on `AddTransaction` | **Pending** — spec gap, not a crash bug (see below) |
+| 6b | Daemon: reject oversell on `AddTransaction` | DONE (this PR) |
 
-### Oversell reject — bug or feature gap?
-
-The design spec requires rejecting sells above held quantity. `core::pnl` already returns `PnlError::Oversell`, but `AddTransaction` **persists the trade first** and only logs a warning if `recompute_asset` fails. The API still returns `{"id": …}`.
-
-This is an **implementation gap vs. the spec** (data integrity), not a runtime crash. A user can end up with an invalid ledger row and a stale/missing snapshot. Fixing it means validating before insert (or rolling back in a transaction) and returning `BadRequest` to CLI/TUI.
+**Phase 2 complete** — remaining work is Phase 3 (deferred) and tech debt.
 
 ---
 

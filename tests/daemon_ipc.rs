@@ -92,3 +92,42 @@ async fn add_transaction_with_bad_date_yields_bad_request() {
     assert_eq!(v["status"], "error");
     assert_eq!(v["error"]["code"], "BAD_REQUEST");
 }
+
+#[tokio::test]
+async fn oversell_rejected_and_not_persisted() {
+    let db = Arc::new(Mutex::new(Db::open_in_memory().unwrap()));
+    let chain = Chain::new(vec![]);
+    let cfg = Config::default();
+
+    let buy = Request::new(
+        Action::AddTransaction,
+        serde_json::json!({
+            "symbol": "PETR4", "side": "BUY", "quantity": "100", "price": "10.00", "fees": "0", "executed_at": "2026-01-01"
+        }),
+    );
+    let r = handle(&db, &chain, &cfg, buy).await;
+    assert_eq!(serde_json::to_value(&r).unwrap()["status"], "ok");
+
+    let sell = Request::new(
+        Action::AddTransaction,
+        serde_json::json!({
+            "symbol": "PETR4", "side": "SELL", "quantity": "150", "price": "11.00", "fees": "0", "executed_at": "2026-01-02"
+        }),
+    );
+    let r2 = handle(&db, &chain, &cfg, sell).await;
+    let v2 = serde_json::to_value(&r2).unwrap();
+    assert_eq!(v2["status"], "error");
+    assert_eq!(v2["error"]["code"], "BAD_REQUEST");
+    assert!(v2["error"]["message"]
+        .as_str()
+        .unwrap()
+        .contains("only 100 held"));
+
+    let list = Request::new(Action::ListTransactions, serde_json::json!({}));
+    let txs = serde_json::to_value(handle(&db, &chain, &cfg, list).await).unwrap()["data"]
+        ["transactions"]
+        .as_array()
+        .unwrap()
+        .len();
+    assert_eq!(txs, 1);
+}

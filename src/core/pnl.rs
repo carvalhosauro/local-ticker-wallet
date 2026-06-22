@@ -57,6 +57,21 @@ impl Position {
             realized_pnl: realized,
         })
     }
+
+    /// Reject a new trade if appending it would produce an invalid position.
+    pub fn validate_append(
+        asset: &AssetId,
+        existing: &[Trade],
+        new_trade: &Trade,
+    ) -> Result<(), PnlError> {
+        let next_id = existing.iter().map(|t| t.id).max().unwrap_or(0) + 1;
+        let mut t = new_trade.clone();
+        t.id = next_id;
+        let mut trades = existing.to_vec();
+        trades.push(t);
+        Position::from_trades(asset, &trades)?;
+        Ok(())
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -150,6 +165,25 @@ mod tests {
             trade(2, Side::Sell, "20", "11.00", "0", 2),
         ];
         assert!(matches!(Position::from_trades(&asset, &trades), Err(PnlError::Oversell { .. })));
+    }
+
+    #[test]
+    fn validate_append_rejects_oversell() {
+        let asset = AssetId::b3("PETR4");
+        let existing = vec![trade(1, Side::Buy, "10", "10.00", "0", 1)];
+        let sell = trade(0, Side::Sell, "20", "11.00", "0", 2);
+        assert!(matches!(
+            Position::validate_append(&asset, &existing, &sell),
+            Err(PnlError::Oversell { .. })
+        ));
+    }
+
+    #[test]
+    fn validate_append_accepts_valid_sell() {
+        let asset = AssetId::b3("PETR4");
+        let existing = vec![trade(1, Side::Buy, "10", "10.00", "0", 1)];
+        let sell = trade(0, Side::Sell, "5", "11.00", "0", 2);
+        Position::validate_append(&asset, &existing, &sell).unwrap();
     }
 
     #[test]

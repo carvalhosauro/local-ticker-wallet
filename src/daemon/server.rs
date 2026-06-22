@@ -1,4 +1,5 @@
 use crate::config::Config;
+use crate::core::pnl::Position;
 use crate::core::types::{AssetId, Side, Trade};
 use crate::daemon::recompute::recompute_asset;
 use crate::ipc::{Action, ErrorCode, Request, Response};
@@ -63,6 +64,9 @@ pub async fn handle(db: &Arc<Mutex<Db>>, chain: &Chain, cfg: &Config, req: Reque
                         )?,
                         note: p["note"].as_str().map(|s| s.to_string()),
                     };
+                    let existing = d.list_transactions(Some(&asset))?;
+                    Position::validate_append(&asset, &existing, &t)
+                        .map_err(|e| anyhow::anyhow!("{e}"))?;
                     let new_id = d.insert_transaction(&t)?;
                     if let Err(e) = recompute_asset(&d, &asset, &cfg.score_weights) {
                         eprintln!("warn: recompute {} failed: {e}", asset.symbol);
