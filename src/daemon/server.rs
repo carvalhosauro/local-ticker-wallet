@@ -102,7 +102,18 @@ pub async fn handle(db: &Arc<Mutex<Db>>, chain: &Chain, cfg: &Config, req: Reque
                     let tx_id = req.payload["id"]
                         .as_i64()
                         .ok_or_else(|| anyhow::anyhow!("id required"))?;
+                    let asset = d
+                        .transaction_asset(tx_id)?
+                        .ok_or_else(|| anyhow::anyhow!("transaction not found"))?;
                     let removed = d.delete_transaction(tx_id)?;
+                    if removed {
+                        if let Err(e) = recompute_asset(&d, &asset, &cfg.score_weights) {
+                            eprintln!(
+                                "warn: recompute {} failed after delete: {e}",
+                                asset.symbol
+                            );
+                        }
+                    }
                     Ok(serde_json::json!({"removed": removed}))
                 })(),
                 ErrorCode::BadRequest,

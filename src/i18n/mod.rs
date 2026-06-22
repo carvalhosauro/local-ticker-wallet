@@ -68,6 +68,12 @@ pub struct Bundle {
     pub ledger_col_date: &'static str,
     pub ledger_footer: &'static str,
     pub ledger_empty: &'static str,
+    pub delete_confirm_title: &'static str,
+    pub delete_confirm_prompt: &'static str,
+    pub delete_confirm_footer: &'static str,
+    pub delete_confirm_success: &'static str,
+    pub delete_confirm_err: &'static str,
+    pub delete_confirm_not_found: &'static str,
     // Side labels
     pub side_buy: &'static str,
     pub side_sell: &'static str,

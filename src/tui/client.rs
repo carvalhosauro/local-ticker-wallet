@@ -185,6 +185,16 @@ pub async fn add_transaction(
     Ok(data["id"].as_i64().unwrap_or(0))
 }
 
+/// Removes a transaction by id.
+pub async fn delete_transaction(id: i64) -> anyhow::Result<bool> {
+    let data = send(
+        Action::DeleteTransaction,
+        serde_json::json!({ "id": id }),
+    )
+    .await?;
+    Ok(data["removed"].as_bool().unwrap_or(false))
+}
+
 /// Marks search hits that are already held in the portfolio.
 pub fn mark_portfolio_hits(results: &mut [SearchResultRow], held: &[PositionRow]) {
     let held_syms: std::collections::HashSet<&str> =

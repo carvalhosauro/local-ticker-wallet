@@ -87,6 +87,29 @@ impl Db {
         Ok(n > 0)
     }
 
+    pub fn transaction_asset(&self, id: i64) -> anyhow::Result<Option<AssetId>> {
+        use rusqlite::OptionalExtension;
+        self.conn
+            .query_row(
+                "SELECT symbol, exchange FROM transactions WHERE id = ?1",
+                rusqlite::params![id],
+                |r| Ok(AssetId {
+                    symbol: r.get(0)?,
+                    exchange: r.get(1)?,
+                }),
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn delete_snapshot(&self, asset: &AssetId) -> anyhow::Result<()> {
+        self.conn.execute(
+            "DELETE FROM position_snapshots WHERE symbol = ?1 AND exchange = ?2",
+            rusqlite::params![asset.symbol, asset.exchange],
+        )?;
+        Ok(())
+    }
+
     pub fn distinct_held_assets(&self) -> anyhow::Result<Vec<AssetId>> {
         let mut stmt = self.conn.prepare(
             "SELECT symbol, exchange,
