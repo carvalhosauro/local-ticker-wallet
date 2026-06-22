@@ -44,7 +44,7 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
         Screen::Portfolio => portfolio::handle_key(app, data, code).await,
         Screen::Detail => detail::handle_key(app, data, code).await,
         Screen::Search => search::handle_key(app, data, code).await,
-        Screen::Ledger => ledger::handle_key(app, data, code),
+        Screen::Ledger => ledger::handle_key(app, data, code).await,
     }
 }
 

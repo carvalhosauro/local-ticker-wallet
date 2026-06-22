@@ -5,10 +5,11 @@ use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
 
 use crate::core::format;
 use crate::core::types::Side;
-use crate::tui::app::{App, Toast};
+use crate::tui::app::App;
 use crate::tui::client;
 use crate::tui::input::KeyOutcome;
 use crate::tui::models::LedgerRow;
+use crate::tui::overlays::confirm_delete::ConfirmDelete;
 use crate::tui::state::UiData;
 
 pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &App, rows: &[LedgerRow]) {
@@ -79,7 +80,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &App, rows: &[LedgerR
     frame.render_widget(table, area);
 }
 
-pub fn handle_key(app: &mut App, data: &UiData, code: KeyCode) -> KeyOutcome {
+pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyOutcome {
     match code {
         KeyCode::Esc => app.go_portfolio(),
         KeyCode::Down => {
@@ -89,6 +90,14 @@ pub fn handle_key(app: &mut App, data: &UiData, code: KeyCode) -> KeyOutcome {
         }
         KeyCode::Up => {
             app.ledger_selected = app.ledger_selected.saturating_sub(1);
+        }
+        KeyCode::Char('d') => {
+            if let Some(row) = data.ledger.get(app.ledger_selected).cloned() {
+                app.open_confirm_delete(ConfirmDelete::new(row));
+            }
+        }
+        KeyCode::Char('r') => {
+            reload_ledger(app, data).await;
         }
         _ => {}
     }
@@ -100,9 +109,16 @@ pub async fn ensure_loaded(app: &mut App, data: &mut UiData) {
     if !data.ledger.is_empty() {
         return;
     }
+    reload_ledger(app, data).await;
+}
+
+async fn reload_ledger(app: &mut App, data: &mut UiData) {
     match client::fetch_ledger().await {
-        Ok(rows) => data.ledger = rows,
-        Err(e) => app.show_toast(Toast::error(format!(
+        Ok(rows) => {
+            data.ledger = rows;
+            app.ledger_selected = app.ledger_selected.min(data.ledger.len().saturating_sub(1));
+        }
+        Err(e) => app.show_toast(crate::tui::app::Toast::error(format!(
             "{}: {e}",
             app.bundle.err_fetch_ledger
         ))),

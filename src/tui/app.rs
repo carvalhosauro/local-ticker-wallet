@@ -2,11 +2,13 @@ use crate::config::Locale;
 use crate::core::format::FormatLocale;
 use crate::i18n::Bundle;
 use crate::tui::overlays::add_transaction::AddTransactionForm;
+use crate::tui::overlays::confirm_delete::ConfirmDelete;
 
 /// Active modal overlay (at most one).
 #[derive(Debug, Clone)]
 pub enum Overlay {
     AddTransaction(AddTransactionForm),
+    ConfirmDelete(ConfirmDelete),
 }
 
 /// Which primary screen is active.
@@ -150,6 +152,10 @@ impl App {
         self.overlay = Some(Overlay::AddTransaction(AddTransactionForm::new(
             symbol, price_hint,
         )));
+    }
+
+    pub fn open_confirm_delete(&mut self, dialog: ConfirmDelete) {
+        self.overlay = Some(Overlay::ConfirmDelete(dialog));
     }
 
     pub fn close_overlay(&mut self) {

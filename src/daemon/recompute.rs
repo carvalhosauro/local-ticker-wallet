@@ -12,6 +12,31 @@ pub fn recompute_asset(
     weights: &ScoreWeights,
 ) -> anyhow::Result<PositionSnapshot> {
     let trades = db.list_transactions(Some(asset))?;
+    if trades.is_empty() {
+        db.delete_snapshot(asset)?;
+        // Return an empty snapshot shape for callers that ignore the result.
+        return Ok(PositionSnapshot {
+            asset: asset.clone(),
+            quantity: rust_decimal::Decimal::ZERO,
+            avg_cost: rust_decimal::Decimal::ZERO,
+            invested: rust_decimal::Decimal::ZERO,
+            market_value: rust_decimal::Decimal::ZERO,
+            unrealized_pnl: rust_decimal::Decimal::ZERO,
+            unrealized_pnl_pct: rust_decimal::Decimal::ZERO,
+            realized_pnl: rust_decimal::Decimal::ZERO,
+            day_change_pct: rust_decimal::Decimal::ZERO,
+            score: 0,
+            score_breakdown: score::ScoreBreakdown {
+                proximity_low: rust_decimal::Decimal::ZERO,
+                below_sma: rust_decimal::Decimal::ZERO,
+                drawdown: rust_decimal::Decimal::ZERO,
+                dividend_yield: rust_decimal::Decimal::ZERO,
+                cost_vs_trend: rust_decimal::Decimal::ZERO,
+                total: 0,
+            },
+            computed_at: chrono::Utc::now().naive_utc(),
+        });
+    }
     let position = Position::from_trades(asset, &trades)?;
     let quote = db.get_quote(asset)?;
     let candles = db.get_candles(asset)?;
@@ -50,6 +75,10 @@ pub fn recompute_asset(
         score_breakdown: breakdown,
         computed_at: chrono::Utc::now().naive_utc(),
     };
-    db.write_snapshot(&snap)?;
+    if position.quantity.is_zero() {
+        db.delete_snapshot(asset)?;
+    } else {
+        db.write_snapshot(&snap)?;
+    }
     Ok(snap)
 }

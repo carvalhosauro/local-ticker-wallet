@@ -1,4 +1,5 @@
 pub mod add_transaction;
+pub mod confirm_delete;
 
 use crossterm::event::KeyCode;
 use ratatui::layout::{Alignment, Rect};
@@ -6,6 +7,7 @@ use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 
+use crate::core::format;
 use crate::core::types::Side;
 use crate::tui::app::{App, Overlay, Toast};
 use crate::tui::client;
@@ -14,11 +16,20 @@ use crate::tui::overlays::add_transaction::{validate, AddField};
 use crate::tui::state::UiData;
 
 pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &App) {
-    let Some(Overlay::AddTransaction(form)) = app.overlay.as_ref() else {
-        return;
-    };
-    let b = app.bundle;
+    match app.overlay.as_ref() {
+        Some(Overlay::AddTransaction(form)) => render_add_transaction(frame, area, app, form),
+        Some(Overlay::ConfirmDelete(dialog)) => render_confirm_delete(frame, area, app, dialog),
+        None => {}
+    }
+}
 
+fn render_add_transaction(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    app: &App,
+    form: &add_transaction::AddTransactionForm,
+) {
+    let b = app.bundle;
     frame.render_widget(Clear, area);
     let popup = centered_rect(62, 70, area);
 
@@ -60,6 +71,61 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &App) {
         Block::default()
             .borders(Borders::ALL)
             .border_style(Style::default().fg(Color::Cyan))
+            .title(title)
+            .title_alignment(Alignment::Center),
+    );
+    frame.render_widget(para, popup);
+}
+
+fn render_confirm_delete(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    app: &App,
+    dialog: &confirm_delete::ConfirmDelete,
+) {
+    let b = app.bundle;
+    let fmt = app.fmt;
+    let row = &dialog.row;
+    let side = match row.side {
+        Side::Buy => b.side_buy,
+        Side::Sell => b.side_sell,
+    };
+
+    frame.render_widget(Clear, area);
+    let popup = centered_rect(58, 40, area);
+
+    let mut lines = vec![
+        Line::from(Span::styled(b.delete_confirm_prompt, Style::default().add_modifier(Modifier::BOLD))),
+        Line::from(""),
+        Line::from(format!(
+            "#{} {} {}",
+            row.id, row.symbol, side
+        )),
+        Line::from(format!(
+            "{} @ {} · {}",
+            format::format_quantity(row.quantity, fmt),
+            format::format_price(row.price, fmt),
+            row.executed_at
+        )),
+    ];
+    if let Some(err) = &dialog.error {
+        lines.push(Line::from(""));
+        lines.push(Line::from(Span::styled(
+            err.as_str(),
+            Style::default().fg(Color::Red),
+        )));
+    }
+    lines.push(Line::from(""));
+    lines.push(Line::from(Span::styled(
+        b.delete_confirm_footer,
+        Style::default().fg(Color::DarkGray),
+    )));
+
+    let title = format!(" {} ", b.delete_confirm_title);
+    let para = Paragraph::new(lines).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .border_style(Style::default().fg(Color::Red))
             .title(title)
             .title_alignment(Alignment::Center),
     );
@@ -137,6 +203,18 @@ fn centered_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
 }
 
 pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyOutcome {
+    match app.overlay {
+        Some(Overlay::AddTransaction(_)) => handle_add_transaction_key(app, data, code).await,
+        Some(Overlay::ConfirmDelete(_)) => handle_confirm_delete_key(app, data, code).await,
+        None => KeyOutcome::Continue,
+    }
+}
+
+async fn handle_add_transaction_key(
+    app: &mut App,
+    data: &mut UiData,
+    code: KeyCode,
+) -> KeyOutcome {
     let Some(Overlay::AddTransaction(form)) = app.overlay.as_mut() else {
         return KeyOutcome::Continue;
     };
@@ -160,7 +238,7 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
             form.toggle_side();
             form.error = None;
         }
-        KeyCode::Enter => return submit(app, data).await,
+        KeyCode::Enter => return submit_add_transaction(app, data).await,
         KeyCode::Backspace if form.focused != AddField::Side => {
             form.focused_mut().pop();
             form.error = None;
@@ -178,11 +256,24 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
     KeyOutcome::Continue
 }
 
-async fn submit(app: &mut App, data: &mut UiData) -> KeyOutcome {
+async fn handle_confirm_delete_key(
+    app: &mut App,
+    data: &mut UiData,
+    code: KeyCode,
+) -> KeyOutcome {
+    match code {
+        KeyCode::Esc => app.close_overlay(),
+        KeyCode::Enter | KeyCode::Char('y') => return confirm_delete(app, data).await,
+        _ => {}
+    }
+    KeyOutcome::Continue
+}
+
+async fn submit_add_transaction(app: &mut App, data: &mut UiData) -> KeyOutcome {
     let b = app.bundle;
     let form = match app.overlay.as_ref() {
         Some(Overlay::AddTransaction(f)) => f.clone(),
-        None => return KeyOutcome::Continue,
+        Some(Overlay::ConfirmDelete(_)) | None => return KeyOutcome::Continue,
     };
 
     let validated = match validate(&form) {
@@ -243,12 +334,56 @@ async fn submit(app: &mut App, data: &mut UiData) -> KeyOutcome {
     KeyOutcome::Continue
 }
 
+async fn confirm_delete(app: &mut App, data: &mut UiData) -> KeyOutcome {
+    let b = app.bundle;
+    let (id, symbol) = match app.overlay.as_ref() {
+        Some(Overlay::ConfirmDelete(d)) => (d.row.id, d.row.symbol.clone()),
+        Some(Overlay::AddTransaction(_)) | None => return KeyOutcome::Continue,
+    };
+
+    match client::delete_transaction(id).await {
+        Ok(true) => {
+            app.close_overlay();
+            app.show_toast(Toast::info(format!("{}: #{id}", b.delete_confirm_success)));
+
+            if let Ok(rows) = client::fetch_ledger().await {
+                data.ledger = rows;
+                app.ledger_selected = app.ledger_selected.min(data.ledger.len().saturating_sub(1));
+            }
+            if let Ok(positions) = client::fetch_positions().await {
+                data.positions = positions;
+            }
+            if data.detail.as_ref().is_some_and(|d| d.symbol == symbol) {
+                match client::fetch_detail(&symbol).await {
+                    Ok(d) => data.detail = Some(d),
+                    Err(_) => data.detail = None,
+                }
+            }
+        }
+        Ok(false) => {
+            if let Some(Overlay::ConfirmDelete(d)) = app.overlay.as_mut() {
+                d.error = Some(b.delete_confirm_not_found.to_string());
+            }
+        }
+        Err(e) => {
+            if let Some(Overlay::ConfirmDelete(d)) = app.overlay.as_mut() {
+                d.error = Some(format!("{}: {e}", b.delete_confirm_err));
+            }
+        }
+    }
+    KeyOutcome::Continue
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::config::Locale;
+    use crate::core::types::Side;
     use crate::tui::app::App;
+    use crate::tui::models::LedgerRow;
+    use crate::tui::overlays::confirm_delete::ConfirmDelete;
     use ratatui::{backend::TestBackend, Terminal};
+    use rust_decimal_macros::dec;
 
     #[test]
     fn renders_add_transaction_modal() {
@@ -266,5 +401,30 @@ mod tests {
             .collect();
         assert!(text.contains("PETR4"));
         assert!(text.contains("Nova transação"));
+    }
+
+    #[test]
+    fn renders_confirm_delete_modal() {
+        let mut app = App::new(Locale::PtBr);
+        app.open_confirm_delete(ConfirmDelete::new(LedgerRow {
+            id: 7,
+            symbol: "PETR4".into(),
+            side: Side::Buy,
+            quantity: dec!(100),
+            price: dec!(28.5),
+            executed_at: "2026-01-02".into(),
+        }));
+        let backend = TestBackend::new(100, 20);
+        let mut term = Terminal::new(backend).unwrap();
+        term.draw(|f| render(f, f.area(), &app)).unwrap();
+        let text: String = term
+            .backend()
+            .buffer()
+            .content()
+            .iter()
+            .map(|c| c.symbol())
+            .collect();
+        assert!(text.contains("PETR4"));
+        assert!(text.contains("Excluir transação"));
     }
 }

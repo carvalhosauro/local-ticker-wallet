@@ -42,6 +42,38 @@ async fn add_then_get_positions_via_handler() {
 }
 
 #[tokio::test]
+async fn delete_transaction_recomputes_positions() {
+    let db = Arc::new(Mutex::new(Db::open_in_memory().unwrap()));
+    let chain = Chain::new(vec![]);
+    let cfg = Config::default();
+
+    let add = Request::new(
+        Action::AddTransaction,
+        serde_json::json!({
+            "symbol": "PETR4", "side": "BUY", "quantity": "100", "price": "10.00", "fees": "0", "executed_at": "2026-01-01"
+        }),
+    );
+    let r = handle(&db, &chain, &cfg, add).await;
+    let v = serde_json::to_value(&r).unwrap();
+    let tx_id = v["data"]["id"].as_i64().unwrap();
+
+    let del = Request::new(
+        Action::DeleteTransaction,
+        serde_json::json!({ "id": tx_id }),
+    );
+    let r2 = handle(&db, &chain, &cfg, del).await;
+    assert_eq!(serde_json::to_value(&r2).unwrap()["status"], "ok");
+
+    let get = Request::new(Action::GetPositions, serde_json::json!({}));
+    let r3 = handle(&db, &chain, &cfg, get).await;
+    let positions = serde_json::to_value(&r3).unwrap()["data"]["positions"]
+        .as_array()
+        .unwrap()
+        .clone();
+    assert!(positions.is_empty());
+}
+
+#[tokio::test]
 async fn add_transaction_with_bad_date_yields_bad_request() {
     let db = Arc::new(Mutex::new(Db::open_in_memory().unwrap()));
     let chain = Chain::new(vec![]); // no network needed for this path
