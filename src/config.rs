@@ -1,5 +1,15 @@
 use serde::{Deserialize, Serialize};
 
+/// User-facing language for the TUI and number formatting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "kebab-case")]
+pub enum Locale {
+    #[default]
+    #[serde(rename = "pt-BR")]
+    PtBr,
+    En,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct ScoreWeights {
     pub proximity_low: u32,
@@ -27,6 +37,7 @@ pub struct Config {
     pub brapi_token: Option<String>,
     pub poll_interval_secs: u64,
     pub score_weights: ScoreWeights,
+    pub locale: Locale,
 }
 
 impl Default for Config {
@@ -35,6 +46,7 @@ impl Default for Config {
             brapi_token: None,
             poll_interval_secs: 60,
             score_weights: ScoreWeights::default(),
+            locale: Locale::default(),
         }
     }
 }
@@ -71,5 +83,14 @@ mod tests {
         let back: Config = serde_json::from_str("{\"poll_interval_secs\": 30}").unwrap();
         assert_eq!(back.poll_interval_secs, 30);
         assert_eq!(back.score_weights.dividend_yield, 20);
+        assert_eq!(back.locale, Locale::PtBr);
+    }
+
+    #[test]
+    fn locale_deserializes_from_config() {
+        let back: Config = serde_json::from_str("{\"locale\": \"en\"}").unwrap();
+        assert_eq!(back.locale, Locale::En);
+        let back: Config = serde_json::from_str("{\"locale\": \"pt-BR\"}").unwrap();
+        assert_eq!(back.locale, Locale::PtBr);
     }
 }

@@ -1,35 +1,57 @@
+use crate::core::format::{self, FormatLocale};
+use crate::core::types::Side;
+use crate::i18n::Bundle;
 use ratatui::layout::{Constraint, Rect};
 use ratatui::style::{Color, Modifier, Style};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Cell, Paragraph, Row, Table};
+use rust_decimal::Decimal;
 
 #[derive(Debug, Clone)]
 pub struct PositionRow {
     pub symbol: String,
-    pub quantity: String,
-    pub avg_cost: String,
-    pub market_value: String,
-    pub day_change_pct: String,
-    pub unrealized_pnl_pct: String,
+    pub quantity: Decimal,
+    pub avg_cost: Decimal,
+    pub market_value: Decimal,
+    pub day_change_pct: Decimal,
+    pub unrealized_pnl_pct: Decimal,
     pub score: u8,
 }
 
-/// Full per-position view including the opportunity-score sub-scores.
 #[derive(Debug, Clone)]
 pub struct DetailData {
     pub symbol: String,
-    pub quantity: String,
-    pub avg_cost: String,
-    pub market_value: String,
-    pub unrealized_pnl: String,
-    pub unrealized_pnl_pct: String,
-    pub day_change_pct: String,
-    pub proximity_low: String,
-    pub below_sma: String,
-    pub drawdown: String,
-    pub dividend_yield: String,
-    pub cost_vs_trend: String,
+    pub quantity: Decimal,
+    pub avg_cost: Decimal,
+    pub market_value: Decimal,
+    pub unrealized_pnl: Decimal,
+    pub unrealized_pnl_pct: Decimal,
+    pub day_change_pct: Decimal,
+    pub proximity_low: Decimal,
+    pub below_sma: Decimal,
+    pub drawdown: Decimal,
+    pub dividend_yield: Decimal,
+    pub cost_vs_trend: Decimal,
     pub total: u8,
+}
+
+#[derive(Debug, Clone)]
+pub struct SearchResultRow {
+    pub symbol: String,
+    pub name: String,
+    pub kind: String,
+    pub currency: String,
+    pub in_portfolio: bool,
+}
+
+#[derive(Debug, Clone)]
+pub struct LedgerRow {
+    pub id: i64,
+    pub symbol: String,
+    pub side: Side,
+    pub quantity: Decimal,
+    pub price: Decimal,
+    pub executed_at: String,
 }
 
 pub fn score_color(score: u8) -> Color {
@@ -42,14 +64,24 @@ pub fn score_color(score: u8) -> Color {
     }
 }
 
-pub fn render_positions(
+pub fn render_portfolio(
     frame: &mut ratatui::Frame,
     area: Rect,
+    bundle: &Bundle,
+    fmt: FormatLocale,
     rows: &[PositionRow],
     selected: usize,
 ) {
-    let header = Row::new(["Symbol", "Qty", "Avg", "Mkt Value", "Day %", "P&L %", "Score"])
-        .style(Style::default().add_modifier(Modifier::BOLD));
+    let header = Row::new([
+        bundle.col_symbol,
+        bundle.col_qty,
+        bundle.col_avg,
+        bundle.col_mkt_value,
+        bundle.col_day_pct,
+        bundle.col_pnl_pct,
+        bundle.col_score,
+    ])
+    .style(Style::default().add_modifier(Modifier::BOLD));
     let body: Vec<Row> = rows
         .iter()
         .enumerate()
@@ -61,97 +93,265 @@ pub fn render_positions(
             };
             Row::new(vec![
                 Cell::from(r.symbol.clone()),
-                Cell::from(r.quantity.clone()),
-                Cell::from(r.avg_cost.clone()),
-                Cell::from(r.market_value.clone()),
-                Cell::from(r.day_change_pct.clone()),
-                Cell::from(r.unrealized_pnl_pct.clone()),
-                Cell::from(r.score.to_string()).style(Style::default().fg(score_color(r.score))),
+                Cell::from(format::format_quantity(r.quantity, fmt)),
+                Cell::from(format::format_price(r.avg_cost, fmt)),
+                Cell::from(format::format_money(r.market_value, fmt)),
+                Cell::from(format::format_pct(r.day_change_pct, fmt)),
+                Cell::from(format::format_pct(r.unrealized_pnl_pct, fmt)),
+                Cell::from(format::format_score(r.score))
+                    .style(Style::default().fg(score_color(r.score))),
             ])
             .style(style)
         })
         .collect();
-    let widths = [Constraint::Length(10); 7];
-    let table = Table::new(body, widths).header(header).block(
-        Block::default().borders(Borders::ALL).title(
-            "local-ticker-wallet — positions (q quit · r refresh · Enter detail)",
-        ),
-    );
+    let widths = [
+        Constraint::Length(10),
+        Constraint::Length(8),
+        Constraint::Length(10),
+        Constraint::Length(14),
+        Constraint::Length(9),
+        Constraint::Length(9),
+        Constraint::Length(6),
+    ];
+    let title = format!("{} — {}", bundle.app_title, bundle.portfolio_footer);
+    let table = Table::new(body, widths)
+        .header(header)
+        .block(Block::default().borders(Borders::ALL).title(title));
     frame.render_widget(table, area);
 }
 
-/// Renders the detail view for a single position: core fields plus the five
-/// opportunity-score sub-scores and the weighted total.
-pub fn render_detail(frame: &mut ratatui::Frame, area: Rect, detail: &DetailData) {
+pub fn render_detail(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    bundle: &Bundle,
+    fmt: FormatLocale,
+    detail: &DetailData,
+) {
     let label = Style::default().add_modifier(Modifier::BOLD);
-    let mut lines = vec![
+    let pnl = format!(
+        "{} ({})",
+        format::format_money(detail.unrealized_pnl, fmt),
+        format::format_pct(detail.unrealized_pnl_pct, fmt)
+    );
+    let lines = vec![
         Line::from(vec![
-            Span::styled("Symbol: ", label),
-            Span::raw(detail.symbol.clone()),
+            Span::styled(bundle.label_symbol, label),
+            Span::raw(&detail.symbol),
         ]),
         Line::from(vec![
-            Span::styled("Quantity: ", label),
-            Span::raw(detail.quantity.clone()),
+            Span::styled(bundle.label_quantity, label),
+            Span::raw(format::format_quantity(detail.quantity, fmt)),
         ]),
         Line::from(vec![
-            Span::styled("Avg Cost: ", label),
-            Span::raw(detail.avg_cost.clone()),
+            Span::styled(bundle.label_avg_cost, label),
+            Span::raw(format::format_price(detail.avg_cost, fmt)),
         ]),
         Line::from(vec![
-            Span::styled("Market Value: ", label),
-            Span::raw(detail.market_value.clone()),
+            Span::styled(bundle.label_market_value, label),
+            Span::raw(format::format_money(detail.market_value, fmt)),
         ]),
         Line::from(vec![
-            Span::styled("Unrealized P&L: ", label),
-            Span::raw(format!("{} ({}%)", detail.unrealized_pnl, detail.unrealized_pnl_pct)),
+            Span::styled(bundle.label_unrealized_pnl, label),
+            Span::raw(pnl),
         ]),
         Line::from(vec![
-            Span::styled("Day %: ", label),
-            Span::raw(detail.day_change_pct.clone()),
+            Span::styled(bundle.label_day_pct, label),
+            Span::raw(format::format_pct(detail.day_change_pct, fmt)),
         ]),
         Line::from(""),
-        Line::from(Span::styled("Score breakdown", label)),
+        Line::from(Span::styled(bundle.score_breakdown, label)),
+        Line::from(format!(
+            "  {}: {}",
+            bundle.score_proximity_low,
+            format::format_score_sub(detail.proximity_low, fmt)
+        )),
+        Line::from(format!(
+            "  {}: {}",
+            bundle.score_below_sma,
+            format::format_score_sub(detail.below_sma, fmt)
+        )),
+        Line::from(format!(
+            "  {}: {}",
+            bundle.score_drawdown,
+            format::format_score_sub(detail.drawdown, fmt)
+        )),
+        Line::from(format!(
+            "  {}: {}",
+            bundle.score_dividend_yield,
+            format::format_score_sub(detail.dividend_yield, fmt)
+        )),
+        Line::from(format!(
+            "  {}: {}",
+            bundle.score_cost_vs_trend,
+            format::format_score_sub(detail.cost_vs_trend, fmt)
+        )),
         Line::from(vec![
-            Span::raw("  proximity_low: "),
-            Span::raw(detail.proximity_low.clone()),
-        ]),
-        Line::from(vec![
-            Span::raw("  below_sma:     "),
-            Span::raw(detail.below_sma.clone()),
-        ]),
-        Line::from(vec![
-            Span::raw("  drawdown:      "),
-            Span::raw(detail.drawdown.clone()),
-        ]),
-        Line::from(vec![
-            Span::raw("  dividend_yield:"),
-            Span::raw(detail.dividend_yield.clone()),
-        ]),
-        Line::from(vec![
-            Span::raw("  cost_vs_trend: "),
-            Span::raw(detail.cost_vs_trend.clone()),
+            Span::styled(bundle.score_total, label),
+            Span::styled(
+                format::format_score(detail.total),
+                Style::default().fg(score_color(detail.total)),
+            ),
         ]),
     ];
-    lines.push(Line::from(vec![
-        Span::styled("  Total: ", label),
-        Span::styled(
-            detail.total.to_string(),
-            Style::default().fg(score_color(detail.total)),
-        ),
-    ]));
+    let title = format!("{} — {}", bundle.detail_title, bundle.detail_footer);
+    let para = Paragraph::new(lines).block(Block::default().borders(Borders::ALL).title(title));
+    frame.render_widget(para, area);
+}
 
-    let para = Paragraph::new(lines).block(
+pub fn render_search(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    bundle: &Bundle,
+    query: &str,
+    results: &[SearchResultRow],
+    selected: usize,
+) {
+    let chunks = ratatui::layout::Layout::vertical([
+        ratatui::layout::Constraint::Length(3),
+        ratatui::layout::Constraint::Min(3),
+    ])
+    .split(area);
+
+    let query_line = if query.is_empty() {
+        bundle.search_placeholder.to_string()
+    } else {
+        format!("{query}_")
+    };
+    let query_block = Paragraph::new(query_line).block(
         Block::default()
             .borders(Borders::ALL)
-            .title("position detail (Esc back · q quit)"),
+            .title(bundle.search_title),
     );
-    frame.render_widget(para, area);
+    frame.render_widget(query_block, chunks[0]);
+
+    if results.is_empty() {
+        let empty = Paragraph::new(bundle.search_no_results).block(Block::default().borders(Borders::ALL));
+        frame.render_widget(empty, chunks[1]);
+        return;
+    }
+
+    let header = Row::new([
+        bundle.search_col_symbol,
+        bundle.search_col_name,
+        bundle.search_col_kind,
+        bundle.search_col_currency,
+    ])
+    .style(Style::default().add_modifier(Modifier::BOLD));
+    let body: Vec<Row> = results
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let style = if i == selected {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            let status = if r.in_portfolio {
+                bundle.search_in_portfolio
+            } else {
+                bundle.search_not_in_portfolio
+            };
+            Row::new(vec![
+                Cell::from(r.symbol.clone()),
+                Cell::from(format!("{} ({status})", r.name)),
+                Cell::from(r.kind.clone()),
+                Cell::from(r.currency.clone()),
+            ])
+            .style(style)
+        })
+        .collect();
+    let widths = [
+        Constraint::Length(10),
+        Constraint::Min(20),
+        Constraint::Length(10),
+        Constraint::Length(8),
+    ];
+    let table = Table::new(body, widths)
+        .header(header)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(bundle.search_footer),
+        );
+    frame.render_widget(table, chunks[1]);
+}
+
+pub fn render_ledger(
+    frame: &mut ratatui::Frame,
+    area: Rect,
+    bundle: &Bundle,
+    fmt: FormatLocale,
+    rows: &[LedgerRow],
+    selected: usize,
+) {
+    if rows.is_empty() {
+        let empty = Paragraph::new(bundle.ledger_empty).block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!("{} — {}", bundle.ledger_title, bundle.ledger_footer)),
+        );
+        frame.render_widget(empty, area);
+        return;
+    }
+
+    let header = Row::new([
+        bundle.ledger_col_id,
+        bundle.ledger_col_symbol,
+        bundle.ledger_col_side,
+        bundle.ledger_col_qty,
+        bundle.ledger_col_price,
+        bundle.ledger_col_date,
+    ])
+    .style(Style::default().add_modifier(Modifier::BOLD));
+    let body: Vec<Row> = rows
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            let style = if i == selected {
+                Style::default().add_modifier(Modifier::REVERSED)
+            } else {
+                Style::default()
+            };
+            let side = match r.side {
+                Side::Buy => bundle.side_buy,
+                Side::Sell => bundle.side_sell,
+            };
+            Row::new(vec![
+                Cell::from(r.id.to_string()),
+                Cell::from(r.symbol.clone()),
+                Cell::from(side),
+                Cell::from(format::format_quantity(r.quantity, fmt)),
+                Cell::from(format::format_price(r.price, fmt)),
+                Cell::from(r.executed_at.clone()),
+            ])
+            .style(style)
+        })
+        .collect();
+    let widths = [
+        Constraint::Length(6),
+        Constraint::Length(10),
+        Constraint::Length(8),
+        Constraint::Length(8),
+        Constraint::Length(10),
+        Constraint::Length(12),
+    ];
+    let table = Table::new(body, widths)
+        .header(header)
+        .block(
+            Block::default()
+                .borders(Borders::ALL)
+                .title(format!("{} — {}", bundle.ledger_title, bundle.ledger_footer)),
+        );
+    frame.render_widget(table, area);
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::Locale;
+    use crate::i18n::bundle;
     use ratatui::{backend::TestBackend, Terminal};
+    use rust_decimal_macros::dec;
 
     fn buffer_text<F>(width: u16, height: u16, draw: F) -> String
     where
@@ -166,41 +366,46 @@ mod tests {
 
     #[test]
     fn renders_symbol_and_score() {
+        let b = bundle(Locale::En);
+        let fmt = FormatLocale::from(Locale::En);
         let rows = vec![PositionRow {
             symbol: "PETR4".into(),
-            quantity: "100".into(),
-            avg_cost: "10.00".into(),
-            market_value: "1200.00".into(),
-            day_change_pct: "1.50".into(),
-            unrealized_pnl_pct: "20.00".into(),
+            quantity: dec!(100),
+            avg_cost: dec!(10),
+            market_value: dec!(1200),
+            day_change_pct: dec!(1.5),
+            unrealized_pnl_pct: dec!(20),
             score: 73,
         }];
-        let text = buffer_text(80, 10, |f| render_positions(f, f.area(), &rows, 0));
+        let text = buffer_text(100, 12, |f| {
+            render_portfolio(f, f.area(), b, fmt, &rows, 0)
+        });
         assert!(text.contains("PETR4"));
         assert!(text.contains("73"));
     }
 
     #[test]
-    fn renders_detail_symbol_and_subscores() {
+    fn renders_detail_with_localized_labels() {
+        let b = bundle(Locale::PtBr);
+        let fmt = FormatLocale::from(Locale::PtBr);
         let detail = DetailData {
             symbol: "VALE3".into(),
-            quantity: "200".into(),
-            avg_cost: "60.00".into(),
-            market_value: "13000.00".into(),
-            unrealized_pnl: "1000.00".into(),
-            unrealized_pnl_pct: "8.33".into(),
-            day_change_pct: "-0.50".into(),
-            proximity_low: "90.0".into(),
-            below_sma: "50.0".into(),
-            drawdown: "40.0".into(),
-            dividend_yield: "70.0".into(),
-            cost_vs_trend: "30.0".into(),
+            quantity: dec!(200),
+            avg_cost: dec!(60),
+            market_value: dec!(13000),
+            unrealized_pnl: dec!(1000),
+            unrealized_pnl_pct: dec!(8.33),
+            day_change_pct: dec!(-0.5),
+            proximity_low: dec!(90),
+            below_sma: dec!(50),
+            drawdown: dec!(40),
+            dividend_yield: dec!(70),
+            cost_vs_trend: dec!(30),
             total: 61,
         };
-        let text = buffer_text(80, 20, |f| render_detail(f, f.area(), &detail));
-        assert!(text.contains("VALE3"), "detail must show the symbol");
-        assert!(text.contains("proximity"), "detail must show a sub-score label");
-        assert!(text.contains("Total"), "detail must show the total label");
-        assert!(text.contains("61"), "detail must show the total value");
+        let text = buffer_text(100, 22, |f| render_detail(f, f.area(), b, fmt, &detail));
+        assert!(text.contains("VALE3"));
+        assert!(text.contains("Composição do score"));
+        assert!(text.contains("61"));
     }
 }
