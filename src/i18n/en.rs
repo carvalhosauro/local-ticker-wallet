@@ -28,6 +28,8 @@ pub const BUNDLE: Bundle = Bundle {
     score_cost_vs_trend: "Cost vs trend",
     score_total: "Total: ",
     detail_footer: "Esc back · r refresh · a add trade · l ledger · q quit",
+    chart_title: "Price history (1y)",
+    chart_empty: "No history — press r to refresh",
     search_title: "asset search",
     search_placeholder: "Type to search…",
     search_col_symbol: "Symbol",
