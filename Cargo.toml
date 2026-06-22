@@ -3,6 +3,10 @@ name = "local-ticker-wallet"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
+description = "Local TUI stock wallet for B3 assets"
+license = "MIT"
+repository = "https://github.com/carvalhosauro/local-ticker-wallet"
+homepage = "https://github.com/carvalhosauro/local-ticker-wallet"
 
 [[bin]]
 name = "ltw"
@@ -31,16 +35,33 @@ thiserror = "1"
 wiremock = "0.6"
 tempfile = "3"
 
+# Config for 'dist'
 [workspace.metadata.dist]
+# The preferred dist version to use in CI (Cargo.toml SemVer syntax)
 cargo-dist-version = "0.32.0"
+# CI backends to support
 ci = "github"
+# The installers to generate for each app
 installers = ["shell", "homebrew"]
+# A GitHub repo to push Homebrew formulas to
 tap = "carvalhosauro/homebrew-tap"
-targets = [
-  "x86_64-unknown-linux-gnu",
-  "aarch64-unknown-linux-gnu",
-  "x86_64-apple-darwin",
-  "aarch64-apple-darwin",
-]
+# Publish jobs to run in CI
+publish-jobs = ["homebrew"]
+# Target platforms to build apps for (Rust target-triple syntax)
+targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
+# Which actions to run on pull requests
 pr-run-mode = "plan"
+# Whether dist should create a Github Release or use an existing draft
 create-release = true
+# Path that installers should place binaries in
+install-path = "CARGO_HOME"
+# Whether to install an updater program
+install-updater = false
+
+[workspace.metadata.dist.dependencies.apt]
+gcc-aarch64-linux-gnu = "*"
+
+# The profile that 'dist' will build with
+[profile.dist]
+inherits = "release"
+lto = "thin"
