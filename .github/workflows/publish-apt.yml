@@ -1,0 +1,60 @@
+name: Publish APT repository
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: apt-pages
+  cancel-in-progress: false
+
+jobs:
+  publish-apt:
+    runs-on: ubuntu-latest
+    if: ${{ !fromJson(inputs.plan).announcement_is_prerelease }}
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: artifacts-*
+          path: artifacts/
+          merge-multiple: true
+
+      - name: Install nfpm
+        run: |
+          curl -fsSL https://github.com/goreleaser/nfpm/releases/download/v2.41.2/nfpm_2.41.2_amd64.deb -o /tmp/nfpm.deb
+          sudo dpkg -i /tmp/nfpm.deb
+
+      - name: Build Debian packages
+        env:
+          PLAN: ${{ inputs.plan }}
+          LTW_VERSION: ${{ fromJson(inputs.plan).releases[0].app_version }}
+        run: packaging/build-debs.sh artifacts/
+
+      - name: Build APT index
+        run: packaging/build-apt-repo.sh dist/apt-repo
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist/apt-repo
+
+      - id: deploy
+        name: Deploy to GitHub Pages
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,22 @@
+name: Publish to crates.io
+
+on:
+  workflow_call:
+    inputs:
+      plan:
+        required: true
+        type: string
+
+jobs:
+  publish-crates-io:
+    runs-on: ubuntu-latest
+    if: ${{ !fromJson(inputs.plan).announcement_is_prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Publish crate
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+        run: cargo publish --locked --token "$CARGO_REGISTRY_TOKEN"

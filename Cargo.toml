@@ -1,12 +1,20 @@
 [package]
-name = "local-ticker-wallet"
+name = "ltw"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.75"
 description = "Local TUI stock wallet for B3 assets"
+readme = "README.md"
 license = "MIT"
 repository = "https://github.com/carvalhosauro/local-ticker-wallet"
 homepage = "https://github.com/carvalhosauro/local-ticker-wallet"
+keywords = ["stocks", "portfolio", "tui", "b3", "finance", "cli"]
+categories = ["command-line-utilities", "finance"]
+authors = ["carvalhosauro"]
+
+[lib]
+name = "local_ticker_wallet"
+path = "src/lib.rs"
 
 [[bin]]
 name = "ltw"
@@ -46,7 +54,7 @@ installers = ["shell", "homebrew"]
 # A GitHub repo to push Homebrew formulas to
 tap = "carvalhosauro/homebrew-tap"
 # Publish jobs to run in CI
-publish-jobs = ["homebrew"]
+publish-jobs = ["homebrew", "./publish-crates-io", "./publish-apt"]
 # Target platforms to build apps for (Rust target-triple syntax)
 targets = ["aarch64-apple-darwin", "aarch64-unknown-linux-gnu", "x86_64-apple-darwin", "x86_64-unknown-linux-gnu"]
 # Which actions to run on pull requests

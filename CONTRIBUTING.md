@@ -53,6 +53,23 @@ Read [docs/architecture.md](docs/architecture.md) before large changes. Guiding 
 
 Include OS, Rust version (`rustc --version`), how you invoked `ltw`, and relevant log output. For daemon issues, run `ltw daemon >/tmp/ltw-daemon.log 2>&1` and attach the log.
 
+## Releasing (maintainers)
+
+Pushing a semver git tag (e.g. `v0.1.0`) triggers the Release workflow. Required repository secrets:
+
+| Secret | Purpose |
+|--------|---------|
+| `CARGO_REGISTRY_TOKEN` | Publish `ltw` to [crates.io](https://crates.io/crates/ltw) |
+| `HOMEBREW_TAP_TOKEN` | Push Homebrew formula to `carvalhosauro/homebrew-tap` |
+
+Also enable **GitHub Pages** (source: GitHub Actions) so the APT repository is served at `https://carvalhosauro.github.io/local-ticker-wallet/`.
+
+Dry-run the release plan locally:
+
+```bash
+cargo dist plan
+```
+
 ## License
 
 By contributing, you agree that your contributions will be licensed under the [MIT License](LICENSE).

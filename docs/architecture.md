@@ -129,4 +129,13 @@ cargo nextest run --lib --test daemon_ipc
 
 ## Release & distribution
 
-Releases are automated with [cargo-dist](https://github.com/axodotdev/cargo-dist): tagged semver pushes build Linux/macOS archives, shell installers, and Homebrew formulas. Configuration lives in `Cargo.toml` under `[workspace.metadata.dist]`.
+Releases are automated with [cargo-dist](https://github.com/axodotdev/cargo-dist). Pushing a semver tag (e.g. `v0.1.0`) triggers:
+
+| Channel | Artifact |
+|---------|----------|
+| GitHub Releases | Platform tarballs, `ltw-installer.sh`, checksums |
+| [crates.io](https://crates.io/crates/ltw) | `cargo install ltw` |
+| [APT](https://carvalhosauro.github.io/local-ticker-wallet/) | `sudo apt install ltw` (Debian/Ubuntu, amd64 + arm64) |
+| [Homebrew tap](https://github.com/carvalhosauro/homebrew-tap) | `brew install carvalhosauro/tap/ltw` |
+
+Configuration lives in `Cargo.toml` under `[workspace.metadata.dist]`. Debian packages are built with [nfpm](https://nfpm.goreleaser.com/) in `.github/workflows/publish-apt.yml` and published to GitHub Pages.

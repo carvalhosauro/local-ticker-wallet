@@ -1,49 +1,138 @@
 # Installation
 
-## Requirements
+Choose the method that fits your system. Every option installs the **`ltw`** command.
 
-| Component | Version / notes |
-|-----------|----------------|
-| Rust | ≥ 1.85 (`rustup` stable recommended) |
-| mold linker | Required on Linux x86_64 (`.cargo/config.toml` sets `-fuse-ld=mold`) |
-| Network | Needed for `refresh`, `search`, and the background poller (Yahoo / brapi) |
-| Offline commands | `add`, `list`, `delete`, `export`, `import` work without network |
+## Quick reference
 
-## Install from GitHub Releases
+| Method | Command | Best for |
+|--------|---------|----------|
+| **APT** (Debian/Ubuntu) | `curl -fsSL …/install-apt.sh \| sudo sh` | Easiest on Linux — system-wide `/usr/bin/ltw` |
+| **Shell** (curl) | `curl -LsSf …/ltw-installer.sh \| sh` | Linux/macOS without root — installs to `~/.cargo/bin` |
+| **Homebrew** | `brew install carvalhosauro/tap/ltw` | macOS and Linux with Homebrew |
+| **crates.io** | `cargo install ltw` | Rust developers |
+| **GitHub Release** | download `.tar.xz` from [Releases](https://github.com/carvalhosauro/local-ticker-wallet/releases) | Manual / air-gapped |
 
-Tagged releases publish archives and installers via [cargo-dist](https://github.com/axodotdev/cargo-dist).
+---
 
-1. Open [Releases](https://github.com/carvalhosauro/local-ticker-wallet/releases).
-2. Download the archive for your platform (`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, or `aarch64-apple-darwin`).
-3. Extract and place `ltw` on your `PATH`.
+## Debian / Ubuntu (APT)
 
-A shell installer script is attached to each release when available.
+**One command** — adds the repository and installs:
 
-### Homebrew (macOS / Linux)
+```bash
+curl -fsSL https://carvalhosauro.github.io/local-ticker-wallet/install-apt.sh | sudo sh
+```
+
+After the repository is configured, updates are standard:
+
+```bash
+sudo apt update
+sudo apt install ltw        # first install
+sudo apt upgrade ltw        # upgrade to a new release
+```
+
+The package installs `ltw` to `/usr/bin/ltw`. Supports **amd64** and **arm64**.
+
+<details>
+<summary>Manual repository setup</summary>
+
+```bash
+echo 'deb [trusted=yes arch=amd64,arm64] https://carvalhosauro.github.io/local-ticker-wallet ./' \
+  | sudo tee /etc/apt/sources.list.d/ltw.list
+sudo apt update
+sudo apt install ltw
+```
+
+</details>
+
+> **Note:** The APT repository is published on [GitHub Pages](https://carvalhosauro.github.io/local-ticker-wallet/) when a release tag is pushed. Until the first release, use the shell installer or `cargo install` below.
+
+---
+
+## Shell installer (Linux & macOS)
+
+No root required. Detects your CPU/OS, downloads the matching binary, and installs to `~/.cargo/bin`:
+
+```bash
+curl --proto '=https' --tlsv1.2 -LsSf \
+  https://github.com/carvalhosauro/local-ticker-wallet/releases/latest/download/ltw-installer.sh | sh
+```
+
+Restart your shell, or run:
+
+```bash
+source "$HOME/.cargo/env"    # if rustup installed cargo's env helper
+# or
+source "$HOME/.profile"      # installer also updates ~/.profile
+```
+
+Requires `curl` (or `wget`), `tar`, and `unzip`.
+
+---
+
+## Homebrew
 
 ```bash
 brew install carvalhosauro/tap/ltw
 ```
 
-Formulas are published to [carvalhosauro/homebrew-tap](https://github.com/carvalhosauro/homebrew-tap) on release.
+Formulas are published automatically to [carvalhosauro/homebrew-tap](https://github.com/carvalhosauro/homebrew-tap) on each release.
+
+---
+
+## crates.io
+
+```bash
+cargo install ltw
+```
+
+- Requires **Rust ≥ 1.85** (`rustup` recommended).
+- Binary lands in `~/.cargo/bin` — ensure it is on your `PATH`.
+- No `mold` linker needed for crates.io installs (only applies when building from a git checkout).
+
+Upgrade to the latest release:
+
+```bash
+cargo install ltw --force
+```
+
+---
+
+## GitHub Releases (manual)
+
+1. Open [Releases](https://github.com/carvalhosauro/local-ticker-wallet/releases).
+2. Download the archive for your platform:
+   - `ltw-x86_64-unknown-linux-gnu.tar.xz`
+   - `ltw-aarch64-unknown-linux-gnu.tar.xz`
+   - `ltw-x86_64-apple-darwin.tar.xz`
+   - `ltw-aarch64-apple-darwin.tar.xz`
+3. Extract and move `ltw` to a directory on your `PATH` (e.g. `/usr/local/bin` or `~/.local/bin`).
+
+---
 
 ## Build from source
+
+For contributors or unreleased changes:
 
 ```bash
 git clone https://github.com/carvalhosauro/local-ticker-wallet.git
 cd local-ticker-wallet
-cargo build --release
-# binary: target/release/ltw
-
-# Or install into ~/.cargo/bin
 cargo install --path .
 ```
 
-On Debian/Ubuntu, install mold if needed:
+On Debian/Ubuntu, install the **mold** linker (required by this repo's `.cargo/config.toml`):
 
 ```bash
 sudo apt install mold
 ```
+
+---
+
+## Requirements
+
+| Component | When needed |
+|-----------|-------------|
+| Network | `refresh`, `search`, background poller (Yahoo / brapi) |
+| Offline | `add`, `list`, `delete`, `export`, `import` work without network |
 
 ## Data locations
 
@@ -55,7 +144,7 @@ Paths follow [XDG Base Directory](https://specifications.freedesktop.org/basedir
 | Config | `$XDG_CONFIG_HOME/local-ticker-wallet/config.json` |
 | Unix socket | `$XDG_RUNTIME_DIR/local-ticker-wallet.sock` (falls back to temp dir) |
 
-Override `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_RUNTIME_DIR` to isolate a throwaway wallet (tests do this).
+Override `XDG_DATA_HOME`, `XDG_CONFIG_HOME`, and `XDG_RUNTIME_DIR` to isolate a throwaway wallet.
 
 ## Configuration
 
@@ -99,7 +188,7 @@ The CLI spawns the daemon as a child that **inherits the caller's stdout/stderr*
 
 ```bash
 ltw daemon >/tmp/ltw-daemon.log 2>&1 &
-sleep 0.5   # wait for socket
+sleep 0.5
 ltw add PETR4 100 28.50 --date 2026-01-02
 ltw list
 ```
@@ -109,8 +198,8 @@ Stop the daemon with `pkill -f 'ltw daemon'` or by killing the background job.
 ## Verify installation
 
 ```bash
-ltw daemon >/tmp/ltw-daemon.log 2>&1 &
+command -v ltw
 ltw add PETR4 1 1.00 --date 2026-01-01
 ltw list
-ltw tui   # interactive — press q to quit
+ltw tui   # press q to quit
 ```
