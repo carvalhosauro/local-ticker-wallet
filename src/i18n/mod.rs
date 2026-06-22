@@ -39,6 +39,8 @@ pub struct Bundle {
     pub score_cost_vs_trend: &'static str,
     pub score_total: &'static str,
     pub detail_footer: &'static str,
+    pub chart_title: &'static str,
+    pub chart_empty: &'static str,
     // Search
     pub search_title: &'static str,
     pub search_placeholder: &'static str,

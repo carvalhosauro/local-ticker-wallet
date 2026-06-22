@@ -28,6 +28,8 @@ pub struct DetailData {
     pub dividend_yield: Decimal,
     pub cost_vs_trend: Decimal,
     pub total: u8,
+    /// Daily close prices for the braille chart (oldest → newest).
+    pub chart_closes: Vec<Decimal>,
 }
 
 #[derive(Debug, Clone)]

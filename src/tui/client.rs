@@ -74,6 +74,14 @@ pub async fn fetch_detail(symbol: &str) -> anyhow::Result<DetailData> {
         cost_vs_trend: parse_decimal(bd["cost_vs_trend"].as_str().unwrap_or("0"))
             .unwrap_or_default(),
         total: bd["total"].as_u64().unwrap_or(0) as u8,
+        chart_closes: data["chart_closes"]
+            .as_array()
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|v| parse_decimal(v.as_str().unwrap_or("0")))
+                    .collect()
+            })
+            .unwrap_or_default(),
     })
 }
 

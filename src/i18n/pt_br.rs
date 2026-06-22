@@ -28,6 +28,8 @@ pub const BUNDLE: Bundle = Bundle {
     score_cost_vs_trend: "Custo vs tendência",
     score_total: "Total: ",
     detail_footer: "Esc voltar · r atualizar · a nova transação · l livro · q sair",
+    chart_title: "Histórico de preços (1a)",
+    chart_empty: "Sem histórico — pressione r para atualizar",
     search_title: "busca de ativos",
     search_placeholder: "Digite para buscar…",
     search_col_symbol: "Ativo",

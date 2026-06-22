@@ -52,9 +52,9 @@ src/tui/
 |-------|---------|--------|
 | 1 | Add Transaction modal | DONE (PR #4) |
 | 2 | Search with live provider + preview | DONE (PR #5) |
-| 3 | Ledger full CRUD + delete confirm | pending |
+| 3 | Ledger full CRUD + delete confirm | pending (PR branch) |
 | 4 | Sort portfolio by score (`o`) | DONE |
-| 5 | Braille chart on Detail | pending |
+| 5 | Braille chart on Detail | DONE (PR #6) |
 | 6 | Daemon: oversell reject, delete recompute | Independent |
 
 ---
