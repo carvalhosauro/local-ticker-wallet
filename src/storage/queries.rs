@@ -7,6 +7,20 @@ fn parse_dec(s: String) -> anyhow::Result<Decimal> {
     Ok(Decimal::from_str(s.trim())?)
 }
 
+/// Raw column tuple read from the `transactions` table by `list_transactions`.
+/// Aliased to keep the row-mapping closure free of `clippy::type_complexity`.
+type TransactionRow = (
+    i64,
+    String,
+    String,
+    String,
+    String,
+    String,
+    String,
+    chrono::NaiveDate,
+    Option<String>,
+);
+
 #[derive(Debug, Clone)]
 pub struct PositionSnapshot {
     pub asset: AssetId,
@@ -40,7 +54,7 @@ impl Db {
 
     pub fn list_transactions(&self, asset: Option<&AssetId>) -> anyhow::Result<Vec<Trade>> {
         let base = "SELECT id, symbol, exchange, side, quantity, price, fees, executed_at, note FROM transactions";
-        let map_row = |r: &rusqlite::Row| -> rusqlite::Result<(i64, String, String, String, String, String, String, chrono::NaiveDate, Option<String>)> {
+        let map_row = |r: &rusqlite::Row| -> rusqlite::Result<TransactionRow> {
             Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?))
         };
         let mut out = Vec::new();

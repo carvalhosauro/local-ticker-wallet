@@ -32,7 +32,9 @@ async fn refresh_quotes(db: &Arc<Mutex<Db>>, chain: &Arc<Chain>, cfg: &Arc<Confi
         if let Ok(q) = chain.quote(&a).await {
             let d = db.lock().await;
             let _ = d.upsert_quote(&q);
-            let _ = crate::daemon::recompute::recompute_asset(&d, &a, &cfg.score_weights);
+            if let Err(e) = crate::daemon::recompute::recompute_asset(&d, &a, &cfg.score_weights) {
+                eprintln!("warn: recompute {} failed: {e}", a.symbol);
+            }
         }
     }
 }
@@ -52,6 +54,8 @@ async fn refresh_history(db: &Arc<Mutex<Db>>, chain: &Arc<Chain>, cfg: &Arc<Conf
             let _ = d.upsert_dividends(&a, &divs);
         }
         let d = db.lock().await;
-        let _ = crate::daemon::recompute::recompute_asset(&d, &a, &cfg.score_weights);
+        if let Err(e) = crate::daemon::recompute::recompute_asset(&d, &a, &cfg.score_weights) {
+            eprintln!("warn: recompute {} failed: {e}", a.symbol);
+        }
     }
 }

@@ -14,8 +14,13 @@ pub struct BrapiProvider {
 
 impl BrapiProvider {
     pub fn new(base_url: String, token: Option<String>) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(10))
+            .connect_timeout(std::time::Duration::from_secs(5))
+            .build()
+            .expect("reqwest client");
         Self {
-            client: reqwest::Client::new(),
+            client,
             base_url,
             token,
         }

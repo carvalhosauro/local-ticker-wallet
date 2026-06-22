@@ -18,135 +18,176 @@ fn snapshot_json(s: &crate::storage::queries::PositionSnapshot) -> serde_json::V
     })
 }
 
+/// Per-action result carrying the `ErrorCode` the failure should map to.
+/// The terminal match in `handle` turns this into a `Response`, so each arm
+/// classifies its own error rather than collapsing everything to `Internal`.
+type ActionResult = Result<serde_json::Value, (ErrorCode, String)>;
+
+/// Tag an `anyhow::Result` with the `ErrorCode` to report if it failed.
+fn classify<T>(r: anyhow::Result<T>, code: ErrorCode) -> Result<T, (ErrorCode, String)> {
+    r.map_err(|e| (code, e.to_string()))
+}
+
 pub async fn handle(db: &Arc<Mutex<Db>>, chain: &Chain, cfg: &Config, req: Request) -> Response {
     let id = req.id.clone();
-    let result: anyhow::Result<serde_json::Value> = match req.action {
+    let result: ActionResult = match req.action {
         Action::Ping => Ok(serde_json::json!({"pong": true})),
 
         Action::AddTransaction => {
             // Pure DB work: hold the lock only for the duration of this arm; no
             // `.await` happens while the guard is alive.
             let d = db.lock().await;
-            (|| {
-                let p = &req.payload;
-                let asset = AssetId::b3(
-                    p["symbol"]
-                        .as_str()
-                        .ok_or_else(|| anyhow::anyhow!("symbol required"))?,
-                );
-                let side = match p["side"].as_str() {
-                    Some("SELL") => Side::Sell,
-                    _ => Side::Buy,
-                };
-                let t = Trade {
-                    id: 0,
-                    asset: asset.clone(),
-                    side,
-                    quantity: p["quantity"].as_str().unwrap_or("0").parse()?,
-                    price: p["price"].as_str().unwrap_or("0").parse()?,
-                    fees: p["fees"].as_str().unwrap_or("0").parse()?,
-                    executed_at: chrono::NaiveDate::parse_from_str(
-                        p["executed_at"].as_str().unwrap_or(""),
-                        "%Y-%m-%d",
-                    )?,
-                    note: p["note"].as_str().map(|s| s.to_string()),
-                };
-                let new_id = d.insert_transaction(&t)?;
-                let _ = recompute_asset(&d, &asset, &cfg.score_weights);
-                Ok(serde_json::json!({"id": new_id}))
-            })()
+            // Bad input/payload/parse failures classify as BadRequest.
+            classify(
+                (|| {
+                    let p = &req.payload;
+                    let asset = AssetId::b3(
+                        p["symbol"]
+                            .as_str()
+                            .ok_or_else(|| anyhow::anyhow!("symbol required"))?,
+                    );
+                    let side = match p["side"].as_str() {
+                        Some("SELL") => Side::Sell,
+                        _ => Side::Buy,
+                    };
+                    let t = Trade {
+                        id: 0,
+                        asset: asset.clone(),
+                        side,
+                        quantity: p["quantity"].as_str().unwrap_or("0").parse()?,
+                        price: p["price"].as_str().unwrap_or("0").parse()?,
+                        fees: p["fees"].as_str().unwrap_or("0").parse()?,
+                        executed_at: chrono::NaiveDate::parse_from_str(
+                            p["executed_at"].as_str().unwrap_or(""),
+                            "%Y-%m-%d",
+                        )?,
+                        note: p["note"].as_str().map(|s| s.to_string()),
+                    };
+                    let new_id = d.insert_transaction(&t)?;
+                    if let Err(e) = recompute_asset(&d, &asset, &cfg.score_weights) {
+                        eprintln!("warn: recompute {} failed: {e}", asset.symbol);
+                    }
+                    Ok(serde_json::json!({"id": new_id}))
+                })(),
+                ErrorCode::BadRequest,
+            )
         }
 
         Action::ListTransactions => {
             let d = db.lock().await;
-            (|| {
-                let asset = req.payload["symbol"].as_str().map(AssetId::b3);
-                let txs = d.list_transactions(asset.as_ref())?;
-                let arr: Vec<_> = txs
-                    .iter()
-                    .map(|t| {
-                        serde_json::json!({
-                            "id": t.id, "symbol": t.asset.symbol, "side": match t.side { Side::Buy=>"BUY", Side::Sell=>"SELL" },
-                            "quantity": t.quantity.to_string(), "price": t.price.to_string(), "fees": t.fees.to_string(),
-                            "executed_at": t.executed_at.to_string(), "note": t.note,
+            classify(
+                (|| {
+                    let asset = req.payload["symbol"].as_str().map(AssetId::b3);
+                    let txs = d.list_transactions(asset.as_ref())?;
+                    let arr: Vec<_> = txs
+                        .iter()
+                        .map(|t| {
+                            serde_json::json!({
+                                "id": t.id, "symbol": t.asset.symbol, "side": match t.side { Side::Buy=>"BUY", Side::Sell=>"SELL" },
+                                "quantity": t.quantity.to_string(), "price": t.price.to_string(), "fees": t.fees.to_string(),
+                                "executed_at": t.executed_at.to_string(), "note": t.note,
+                            })
                         })
-                    })
-                    .collect();
-                Ok(serde_json::json!({"transactions": arr}))
-            })()
+                        .collect();
+                    Ok(serde_json::json!({"transactions": arr}))
+                })(),
+                ErrorCode::BadRequest,
+            )
         }
 
         Action::DeleteTransaction => {
             let d = db.lock().await;
-            (|| {
-                let tx_id = req.payload["id"]
-                    .as_i64()
-                    .ok_or_else(|| anyhow::anyhow!("id required"))?;
-                let removed = d.delete_transaction(tx_id)?;
-                Ok(serde_json::json!({"removed": removed}))
-            })()
+            classify(
+                (|| {
+                    let tx_id = req.payload["id"]
+                        .as_i64()
+                        .ok_or_else(|| anyhow::anyhow!("id required"))?;
+                    let removed = d.delete_transaction(tx_id)?;
+                    Ok(serde_json::json!({"removed": removed}))
+                })(),
+                ErrorCode::BadRequest,
+            )
         }
 
         Action::GetPositions => {
             let d = db.lock().await;
-            (|| {
-                let snaps = d.read_snapshots()?;
-                let arr: Vec<_> = snaps.iter().map(snapshot_json).collect();
-                Ok(serde_json::json!({"positions": arr}))
-            })()
+            // Genuine unexpected failures fall back to Internal.
+            classify(
+                (|| {
+                    let snaps = d.read_snapshots()?;
+                    let arr: Vec<_> = snaps.iter().map(snapshot_json).collect();
+                    Ok(serde_json::json!({"positions": arr}))
+                })(),
+                ErrorCode::Internal,
+            )
         }
 
         Action::GetPositionDetail => {
             let d = db.lock().await;
-            (|| {
-                let asset = AssetId::b3(
-                    req.payload["symbol"]
-                        .as_str()
-                        .ok_or_else(|| anyhow::anyhow!("symbol required"))?,
-                );
-                let snap = recompute_asset(&d, &asset, &cfg.score_weights)?;
-                Ok(snapshot_json(&snap))
-            })()
+            classify(
+                (|| {
+                    let asset = AssetId::b3(
+                        req.payload["symbol"]
+                            .as_str()
+                            .ok_or_else(|| anyhow::anyhow!("symbol required"))?,
+                    );
+                    let snap = recompute_asset(&d, &asset, &cfg.score_weights)?;
+                    Ok(snapshot_json(&snap))
+                })(),
+                ErrorCode::Internal,
+            )
         }
 
-        Action::RefreshNow => refresh(
-            db,
-            chain,
-            cfg,
-            req.payload["symbol"].as_str().map(AssetId::b3),
-        )
-        .await
-        .map(|n| serde_json::json!({"refreshed": n})),
+        Action::RefreshNow => classify(
+            refresh(
+                db,
+                chain,
+                cfg,
+                req.payload["symbol"].as_str().map(AssetId::b3),
+            )
+            .await
+            .map(|n| serde_json::json!({"refreshed": n})),
+            ErrorCode::ProviderDown,
+        ),
 
         Action::Search => {
             // No Db lock: this only does provider network I/O.
             let q = req.payload["query"].as_str().unwrap_or("").to_string();
-            match chain.search(&q).await {
-                Ok(assets) => Ok(serde_json::json!({"results": assets})),
-                Err(e) => Err(e),
-            }
+            classify(
+                chain
+                    .search(&q)
+                    .await
+                    .map(|assets| serde_json::json!({"results": assets})),
+                ErrorCode::ProviderDown,
+            )
         }
 
         Action::Import => {
             let d = db.lock().await;
-            crate::portfolio::import_csv(
-                &d,
-                req.payload["path"].as_str().unwrap_or(""),
-                &cfg.score_weights,
+            classify(
+                crate::portfolio::import_csv(
+                    &d,
+                    req.payload["path"].as_str().unwrap_or(""),
+                    &cfg.score_weights,
+                )
+                .map(|n| serde_json::json!({"imported": n})),
+                ErrorCode::BadRequest,
             )
-            .map(|n| serde_json::json!({"imported": n}))
         }
 
         Action::Export => {
             let d = db.lock().await;
-            crate::portfolio::export_csv(&d, req.payload["path"].as_str().unwrap_or(""))
-                .map(|n| serde_json::json!({"exported": n}))
+            classify(
+                crate::portfolio::export_csv(&d, req.payload["path"].as_str().unwrap_or(""))
+                    .map(|n| serde_json::json!({"exported": n})),
+                ErrorCode::BadRequest,
+            )
         }
     };
 
     match result {
         Ok(data) => Response::ok(id, data),
-        Err(e) => Response::err(id, ErrorCode::Internal, e.to_string()),
+        Err((code, message)) => Response::err(id, code, message),
     }
 }
 

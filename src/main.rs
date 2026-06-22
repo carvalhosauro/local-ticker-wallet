@@ -109,7 +109,8 @@ fn print_response(resp: Response) {
             println!("{}", serde_json::to_string_pretty(&data).unwrap())
         }
         Response::Error { error, .. } => {
-            eprintln!("error [{:?}]: {}", error.code, error.message)
+            eprintln!("error [{:?}]: {}", error.code, error.message);
+            std::process::exit(1);
         }
     }
 }

@@ -13,6 +13,8 @@ impl YahooProvider {
     pub fn new(base_url: String) -> Self {
         let client = reqwest::Client::builder()
             .user_agent("Mozilla/5.0 local-ticker-wallet")
+            .timeout(std::time::Duration::from_secs(10))
+            .connect_timeout(std::time::Duration::from_secs(5))
             .build()
             .expect("reqwest client");
         Self { client, base_url }

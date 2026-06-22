@@ -66,10 +66,10 @@ pub fn import_csv(db: &Db, path: &str, weights: &ScoreWeights) -> anyhow::Result
         let t = Trade {
             id: 0,
             asset: asset.clone(),
-            side: if f[2] == "SELL" {
-                Side::Sell
-            } else {
-                Side::Buy
+            side: match f[2] {
+                "BUY" => Side::Buy,
+                "SELL" => Side::Sell,
+                other => anyhow::bail!("unknown side {:?} on line {}", other, i + 1),
             },
             quantity: f[3].parse()?,
             price: f[4].parse()?,

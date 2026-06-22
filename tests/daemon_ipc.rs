@@ -40,3 +40,23 @@ async fn add_then_get_positions_via_handler() {
         rust_decimal_macros::dec!(100)
     );
 }
+
+#[tokio::test]
+async fn add_transaction_with_bad_date_yields_bad_request() {
+    let db = Arc::new(Mutex::new(Db::open_in_memory().unwrap()));
+    let chain = Chain::new(vec![]); // no network needed for this path
+    let cfg = Config::default();
+
+    // Invalid `executed_at` -> chrono parse failure inside the AddTransaction
+    // arm, which the taxonomy must classify as BAD_REQUEST.
+    let add = Request::new(
+        Action::AddTransaction,
+        serde_json::json!({
+            "symbol": "PETR4", "side": "BUY", "quantity": "100", "price": "10.00", "fees": "0", "executed_at": "not-a-date"
+        }),
+    );
+    let r = handle(&db, &chain, &cfg, add).await;
+    let v = serde_json::to_value(&r).unwrap();
+    assert_eq!(v["status"], "error");
+    assert_eq!(v["error"]["code"], "BAD_REQUEST");
+}
