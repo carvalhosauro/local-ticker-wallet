@@ -3102,7 +3102,19 @@ Expected: plan lists four targets, no Windows, shows Homebrew formula path and s
 - CSV ledger export + JSON config import/export — Task 15 (CSV) + Task 1 (`Config` JSON). ✔
 - Tests at every layer + e2e — every task + Tasks 13, 16. ✔
 
-**Gaps consciously deferred (roadmap, per spec):** desktop/telegram alerts; FIIs/ETFs/US/crypto; splits/IR; B3 holiday calendar; `search_cache` TTL wiring; TUI detail-view drill-down is described in Task 17 interfaces but only the positions table is implemented with a test — detail view is a follow-up step within the same task if desired.
+**Must-have before v1.0 release (usability blockers):**
+- TUI: add and search assets directly from interface
+- Decimal formatting standardization across all value displays
+- Price charts/graphs in TUI
+- TUI configuration menu for weights and polling intervals
+
+**Gaps consciously deferred (roadmap, post-v1.0):** 
+- desktop/telegram alerts
+- FIIs/ETFs/US/crypto
+- splits/IR
+- B3 holiday calendar
+- `search_cache` TTL wiring
+- TUI detail-view drill-down (described in Task 17 interfaces but only positions table is implemented with a test — follow-up step if desired)
 
 **Placeholder scan:** No "TBD/TODO" left. Two intentional stubs (`tui::run`, `portfolio::*`) are created early so out-of-order tasks compile and are explicitly replaced in their owning task (17, 15).
 
