@@ -11,6 +11,7 @@ pub enum Action {
     GetPositionDetail,
     RefreshNow,
     Search,
+    GetQuote,
     Import,
     Export,
     Ping,

@@ -48,13 +48,13 @@ src/tui/
 
 ## Phase 2 — Core flows (follow-up PRs)
 
-| Order | Feature | Depends on |
-|-------|---------|------------|
-| 1 | Add Transaction modal | Phase 1 shell |
-| 2 | Search with live provider + preview | Phase 1 Search screen |
-| 3 | Ledger full CRUD + delete confirm | Phase 1 Ledger screen |
-| 4 | Sort portfolio by score (`o`) | Phase 1 |
-| 5 | Braille chart on Detail | Detail screen |
+| Order | Feature | Status |
+|-------|---------|--------|
+| 1 | Add Transaction modal | DONE (PR #4) |
+| 2 | Search with live provider + preview | DONE (PR #5) |
+| 3 | Ledger full CRUD + delete confirm | pending |
+| 4 | Sort portfolio by score (`o`) | DONE |
+| 5 | Braille chart on Detail | pending |
 | 6 | Daemon: oversell reject, delete recompute | Independent |
 
 ---

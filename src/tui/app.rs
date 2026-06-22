@@ -68,6 +68,9 @@ pub struct App {
     pub sort_by_score: bool,
     pub search_pending: bool,
     pub search_deadline: Option<Instant>,
+    pub search_preview_pending: bool,
+    pub search_preview_deadline: Option<Instant>,
+    pub search_preview_symbol: Option<String>,
     pub overlay: Option<Overlay>,
 }
 
@@ -86,6 +89,9 @@ impl App {
             sort_by_score: false,
             search_pending: false,
             search_deadline: None,
+            search_preview_pending: false,
+            search_preview_deadline: None,
+            search_preview_symbol: None,
             overlay: None,
         }
     }
@@ -93,6 +99,18 @@ impl App {
     pub fn schedule_search(&mut self, debounce: Duration) {
         self.search_pending = true;
         self.search_deadline = Some(Instant::now() + debounce);
+    }
+
+    pub fn schedule_search_preview(&mut self, symbol: impl Into<String>, debounce: Duration) {
+        self.search_preview_pending = true;
+        self.search_preview_symbol = Some(symbol.into());
+        self.search_preview_deadline = Some(Instant::now() + debounce);
+    }
+
+    pub fn clear_search_preview_schedule(&mut self) {
+        self.search_preview_pending = false;
+        self.search_preview_deadline = None;
+        self.search_preview_symbol = None;
     }
 
     pub fn show_toast(&mut self, toast: Toast) {

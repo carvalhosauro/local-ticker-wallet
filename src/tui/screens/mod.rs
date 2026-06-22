@@ -17,7 +17,13 @@ pub fn render(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &App
                 detail::render(frame, area, app, detail);
             }
         }
-        Screen::Search => search::render(frame, area, app, &data.search_results),
+        Screen::Search => search::render(
+            frame,
+            area,
+            app,
+            &data.search_results,
+            data.search_preview.as_ref(),
+        ),
         Screen::Ledger => ledger::render(frame, area, app, &data.ledger),
     }
 }

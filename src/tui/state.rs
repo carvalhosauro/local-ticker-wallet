@@ -1,10 +1,11 @@
-use super::models::{DetailData, LedgerRow, PositionRow, SearchResultRow};
+use super::models::{DetailData, LedgerRow, PositionRow, SearchPreview, SearchResultRow};
 
 /// Shared data fetched from the daemon and passed to screen renderers.
 pub struct UiData {
     pub positions: Vec<PositionRow>,
     pub detail: Option<DetailData>,
     pub search_results: Vec<SearchResultRow>,
+    pub search_preview: Option<SearchPreview>,
     pub ledger: Vec<LedgerRow>,
 }
 
@@ -14,6 +15,7 @@ impl UiData {
             positions: Vec::new(),
             detail: None,
             search_results: Vec::new(),
+            search_preview: None,
             ledger: Vec::new(),
         }
     }

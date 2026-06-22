@@ -1,7 +1,7 @@
 use crate::core::format::parse_decimal;
 use crate::core::types::Side;
 use crate::ipc::{Action, Request, Response};
-use crate::tui::models::{DetailData, LedgerRow, PositionRow, SearchResultRow};
+use crate::tui::models::{DetailData, LedgerRow, PositionRow, SearchPreview, SearchResultRow};
 
 async fn send(action: Action, payload: serde_json::Value) -> anyhow::Result<serde_json::Value> {
     let resp = crate::client::send(Request::new(action, payload)).await?;
@@ -94,6 +94,45 @@ pub async fn search_assets(query: &str) -> anyhow::Result<Vec<SearchResultRow>> 
     Ok(rows)
 }
 
+/// Live quote for search preview (does not add the asset to the portfolio).
+pub async fn fetch_quote_preview(
+    row: &SearchResultRow,
+) -> anyhow::Result<SearchPreview> {
+    let data = send(
+        Action::GetQuote,
+        serde_json::json!({ "symbol": row.symbol }),
+    )
+    .await?;
+    Ok(SearchPreview {
+        symbol: row.symbol.clone(),
+        name: row.name.clone(),
+        kind: row.kind.clone(),
+        currency: row.currency.clone(),
+        in_portfolio: row.in_portfolio,
+        price: parse_decimal(data["price"].as_str().unwrap_or("0")).unwrap_or_default(),
+        day_change_pct: parse_decimal(data["day_change_pct"].as_str().unwrap_or("0"))
+            .unwrap_or_default(),
+    })
+}
+
+/// Ranks search hits: portfolio holdings first, then likely B3 tickers.
+pub fn sort_search_results(results: &mut [SearchResultRow]) {
+    results.sort_by(|a, b| {
+        b.in_portfolio
+            .cmp(&a.in_portfolio)
+            .then_with(|| b3_rank(b).cmp(&b3_rank(a)))
+            .then_with(|| a.symbol.cmp(&b.symbol))
+    });
+}
+
+fn b3_rank(row: &SearchResultRow) -> u8 {
+    let s = row.symbol.as_str();
+    let looks_b3 = s.len() >= 5
+        && s.chars().last().map(|c| c.is_ascii_digit()).unwrap_or(false)
+        && row.currency == "BRL";
+    if looks_b3 { 1 } else { 0 }
+}
+
 pub async fn fetch_ledger() -> anyhow::Result<Vec<LedgerRow>> {
     let data = send(Action::ListTransactions, serde_json::json!({})).await?;
     let mut rows = Vec::new();
@@ -159,5 +198,40 @@ pub fn mark_portfolio_hits(results: &mut [SearchResultRow], held: &[PositionRow]
 pub fn sort_positions(rows: &mut [PositionRow], by_score: bool) {
     if by_score {
         rows.sort_by(|a, b| b.score.cmp(&a.score).then_with(|| a.symbol.cmp(&b.symbol)));
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn sort_prioritizes_portfolio_and_b3() {
+        let mut rows = vec![
+            SearchResultRow {
+                symbol: "OXY".into(),
+                name: "Occidental".into(),
+                kind: "EQUITY".into(),
+                currency: "USD".into(),
+                in_portfolio: false,
+            },
+            SearchResultRow {
+                symbol: "PETR4".into(),
+                name: "Petrobras".into(),
+                kind: "EQUITY".into(),
+                currency: "BRL".into(),
+                in_portfolio: true,
+            },
+            SearchResultRow {
+                symbol: "VALE3".into(),
+                name: "Vale".into(),
+                kind: "EQUITY".into(),
+                currency: "BRL".into(),
+                in_portfolio: false,
+            },
+        ];
+        sort_search_results(&mut rows);
+        assert_eq!(rows[0].symbol, "PETR4");
+        assert_eq!(rows[1].symbol, "VALE3");
     }
 }

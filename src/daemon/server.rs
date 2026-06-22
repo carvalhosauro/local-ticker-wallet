@@ -162,6 +162,39 @@ pub async fn handle(db: &Arc<Mutex<Db>>, chain: &Chain, cfg: &Config, req: Reque
             )
         }
 
+        Action::GetQuote => {
+            let symbol = req
+                .payload["symbol"]
+                .as_str()
+                .ok_or_else(|| (ErrorCode::BadRequest, "symbol required".into()));
+            match symbol {
+                Err(e) => Err(e),
+                Ok(sym) => {
+                    let asset = AssetId::b3(sym);
+                    classify(
+                        chain.quote(&asset).await.map(|q| {
+                            let day_change_pct = if q.prev_close.is_zero() {
+                                rust_decimal::Decimal::ZERO
+                            } else {
+                                (q.price - q.prev_close) / q.prev_close
+                                    * rust_decimal::Decimal::from(100)
+                            };
+                            serde_json::json!({
+                                "symbol": q.asset.symbol,
+                                "exchange": q.asset.exchange,
+                                "price": q.price.to_string(),
+                                "prev_close": q.prev_close.to_string(),
+                                "day_change_pct": day_change_pct.to_string(),
+                                "currency": q.currency,
+                                "source": q.source,
+                            })
+                        }),
+                        ErrorCode::ProviderDown,
+                    )
+                }
+            }
+        }
+
         Action::Import => {
             let d = db.lock().await;
             classify(
