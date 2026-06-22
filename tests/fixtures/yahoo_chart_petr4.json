@@ -1,0 +1,8 @@
+{
+  "chart": { "result": [ {
+    "meta": { "currency": "BRL", "symbol": "PETR4.SA", "regularMarketPrice": 38.50, "chartPreviousClose": 37.90, "regularMarketDayHigh": 38.90, "regularMarketDayLow": 37.80 },
+    "timestamp": [1735693200, 1735779600],
+    "indicators": { "quote": [ { "open": [37.0, 38.0], "high": [38.0, 39.0], "low": [36.5, 37.5], "close": [37.9, 38.5], "volume": [1000, 1200] } ] },
+    "events": { "dividends": { "1735693200": { "amount": 0.55, "date": 1735693200 } } }
+  } ] }
+}
