@@ -10,7 +10,7 @@ fn project_dirs() -> ProjectDirs {
 pub fn data_db() -> PathBuf {
     let dir = project_dirs().data_dir().to_path_buf();
     std::fs::create_dir_all(&dir).ok();
-    dir.join("wallet.duckdb")
+    dir.join("wallet.db")
 }
 
 pub fn config_file() -> PathBuf {

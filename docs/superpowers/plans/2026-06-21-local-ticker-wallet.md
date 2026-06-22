@@ -2,21 +2,21 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** A Rust TUI personal stock wallet for B3 assets, backed by a background daemon that polls market data into a local DuckDB cache and computes per-asset P&L, technical signals, and a 0–100 opportunity score.
+**Goal:** A Rust TUI personal stock wallet for B3 assets, backed by a background daemon that polls market data into a local SQLite cache and computes per-asset P&L, technical signals, and a 0–100 opportunity score.
 
-**Architecture:** Single crate, three run modes (`daemon`, `tui`, CLI subcommands). The daemon is the **only** process that opens DuckDB; the TUI and CLI are thin clients that talk to it over a Unix-domain socket using a newline-delimited JSON envelope. All math lives in a pure `core` module that is unit-tested in isolation.
+**Architecture:** Single crate, three run modes (`daemon`, `tui`, CLI subcommands). The daemon is the **only** process that opens SQLite; the TUI and CLI are thin clients that talk to it over a Unix-domain socket using a newline-delimited JSON envelope. All math lives in a pure `core` module that is unit-tested in isolation.
 
-**Tech Stack:** Rust 2021, `tokio` (async daemon + socket), `ratatui` + `crossterm` (TUI), `duckdb` (bundled), `reqwest` + `serde`/`serde_json` (HTTP + protocol), `rust_decimal` (exact money), `chrono` + `chrono-tz` (dates/B3 hours), `clap` (CLI), `uuid` (request ids), `sha2` (migration checksums), `directories` (XDG paths), `anyhow`/`thiserror` (errors). Dev: `wiremock`, `tempfile`.
+**Tech Stack:** Rust 2021, `tokio` (async daemon + socket), `ratatui` + `crossterm` (TUI), `rusqlite` (bundled), `reqwest` + `serde`/`serde_json` (HTTP + protocol), `rust_decimal` (exact money), `chrono` + `chrono-tz` (dates/B3 hours), `clap` (CLI), `uuid` (request ids), `sha2` (migration checksums), `directories` (XDG paths), `anyhow`/`thiserror` (errors). Dev: `wiremock`, `tempfile`.
 
 ## Global Constraints
 
 - Rust edition 2021, MSRV 1.75+.
-- **Money is always `rust_decimal::Decimal`, never `f32`/`f64`.** DuckDB DECIMAL columns are bound as strings (`CAST(? AS DECIMAL(...))`) and read back via `CAST(col AS VARCHAR)` then `Decimal::from_str`. No float anywhere in the money path.
+- **Money is always `rust_decimal::Decimal`, never `f32`/`f64`.** SQLite stores money columns as `TEXT`; bind via `.to_string()` and read back via `Decimal::from_str`. No float anywhere in the money path.
 - Asset identity is the composite `(symbol, exchange)`. MVP holds `exchange = "BVMF"` constant but never hard-codes it away.
-- The daemon is the sole DuckDB opener. TUI/CLI never open the `.db`; they use the socket.
+- The daemon is the sole SQLite opener. TUI/CLI never open the `.db`; they use the socket.
 - IPC is newline-delimited JSON. Envelope: request `{ id, type:"request", action, payload }`; response `{ id, status:"ok", data }` or `{ id, status:"error", error:{ code, message } }`. `id` echoes request→response. Error codes ∈ `{ NOT_FOUND, PROVIDER_DOWN, BAD_REQUEST, INTERNAL }`.
 - Provider order: Yahoo (primary) → brapi (fallback), per call. `source` recorded on every quote.
-- XDG paths: DB `~/.local/share/local-ticker-wallet/wallet.duckdb`, config `~/.config/local-ticker-wallet/config.json`, socket `$XDG_RUNTIME_DIR/local-ticker-wallet.sock`.
+- XDG paths: DB `~/.local/share/local-ticker-wallet/wallet.db`, config `~/.config/local-ticker-wallet/config.json`, socket `$XDG_RUNTIME_DIR/local-ticker-wallet.sock`.
 - TDD: write the failing test, watch it fail, implement minimally, watch it pass, commit. Small commits per task.
 
 ---
@@ -49,7 +49,7 @@ path = "src/main.rs"
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macros", "time", "process", "signal"] }
 ratatui = "0.28"
 crossterm = "0.28"
-duckdb = { version = "1.1", features = ["bundled"] }
+rusqlite = { version = "0.32", features = ["bundled", "chrono"] }
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -73,8 +73,7 @@ tempfile = "3"
 
 ```
 /target
-*.duckdb
-*.duckdb.wal
+*.db
 ```
 
 - [ ] **Step 3: Create `src/paths.rs`**
@@ -91,7 +90,7 @@ fn project_dirs() -> ProjectDirs {
 pub fn data_db() -> PathBuf {
     let dir = project_dirs().data_dir().to_path_buf();
     std::fs::create_dir_all(&dir).ok();
-    dir.join("wallet.duckdb")
+    dir.join("wallet.db")
 }
 
 pub fn config_file() -> PathBuf {
@@ -201,6 +200,8 @@ fn main() {
 
 Run: `cargo test`
 Expected: PASS (2 tests in `config`).
+
+- [ ] **Done when:** `cargo test` passes (2 tests: `config_roundtrips_through_json`, `partial_json_fills_defaults`). Project compiles with no errors. `paths::data_db()`, `paths::config_file()`, `paths::socket_path()` all return valid `PathBuf` values.
 
 - [ ] **Step 9: Commit**
 
@@ -334,6 +335,8 @@ Add line: `pub mod core;`
 
 Run: `cargo test core::types`
 Expected: PASS (2 tests).
+
+- [ ] **Done when:** `cargo t core::types` passes (2 tests: `b3_asset_builds_yahoo_ticker`, `side_serializes_uppercase`). No compiler errors.
 
 - [ ] **Step 5: Commit**
 
@@ -500,6 +503,8 @@ impl Position {
 Run: `cargo test core::pnl`
 Expected: PASS (4 tests).
 
+- [ ] **Done when:** `cargo t core::pnl` passes (4 tests: `two_buys_weighted_average`, `buy_fees_fold_into_cost`, `sell_realizes_pnl_keeps_avg_cost`, `oversell_errors`).
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -593,6 +598,8 @@ impl Valuation {
 
 Run: `cargo test core::pnl`
 Expected: PASS (5 tests).
+
+- [ ] **Done when:** `cargo t core::pnl` passes (5 tests — all prior + `valuation_basic`).
 
 - [ ] **Step 5: Commit**
 
@@ -718,6 +725,8 @@ pub fn window_return_pct(candles: &[Candle], days: usize) -> Option<Decimal> {
 
 Run: `cargo test core::signals`
 Expected: PASS (4 tests).
+
+- [ ] **Done when:** `cargo t core::signals` passes (4 tests: `sma_last_n`, `high_low_52w_picks_extremes`, `drawdown_from_recent_peak`, `window_return`).
 
 - [ ] **Step 5: Commit**
 
@@ -896,6 +905,8 @@ pub fn compute(
 Run: `cargo test core::score`
 Expected: PASS (2 tests).
 
+- [ ] **Done when:** `cargo t core::score` passes (2 tests: `cheap_stock_near_low_scores_high`, `total_is_weighted_average_bounded_0_100`). `total` is always 0–100.
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -912,7 +923,7 @@ git add -A && git commit -m "feat(core): opportunity score with transparent weig
 - Test: inline in `src/storage/db.rs`
 
 **Interfaces:**
-- Produces: `storage::db::Db` wrapping `duckdb::Connection`; `Db::open(path: &Path) -> anyhow::Result<Db>` runs migrations on open; `Db::open_in_memory() -> anyhow::Result<Db>` for tests; `Db::schema_version() -> anyhow::Result<i32>`.
+- Produces: `storage::db::Db` wrapping `rusqlite::Connection`; `Db::open(path: &Path) -> anyhow::Result<Db>` runs migrations on open; `Db::open_in_memory() -> anyhow::Result<Db>` for tests; `Db::schema_version() -> anyhow::Result<i32>`.
 - Produces: `schema::MIGRATIONS: &[(i32, &str)]` (version, SQL) and `schema::checksum(sql: &str) -> String` (hex SHA-256).
 - Migration runner records `(version, applied_at, checksum)` and refuses to run if a recorded checksum differs from the embedded migration's checksum (`anyhow::bail!` with a clear message).
 
@@ -938,47 +949,47 @@ pub fn checksum(sql: &str) -> String {
 pub const MIGRATIONS: &[(i32, &str)] = &[(
     1,
     r#"
-    CREATE TABLE assets (
-        symbol TEXT, exchange TEXT, name TEXT, kind TEXT, currency TEXT,
-        last_seen TIMESTAMP,
+    CREATE TABLE IF NOT EXISTS assets (
+        symbol TEXT NOT NULL, exchange TEXT NOT NULL, name TEXT, kind TEXT, currency TEXT,
+        last_seen TEXT,
         PRIMARY KEY (symbol, exchange)
     );
-    CREATE SEQUENCE tx_id_seq START 1;
-    CREATE TABLE transactions (
-        id BIGINT PRIMARY KEY DEFAULT nextval('tx_id_seq'),
-        symbol TEXT, exchange TEXT, side TEXT,
-        quantity DECIMAL(18,8), price DECIMAL(18,4), fees DECIMAL(18,4) DEFAULT 0,
-        executed_at DATE, note TEXT, created_at TIMESTAMP DEFAULT now()
+    CREATE TABLE IF NOT EXISTS transactions (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        symbol TEXT NOT NULL, exchange TEXT NOT NULL, side TEXT NOT NULL,
+        quantity TEXT NOT NULL, price TEXT NOT NULL, fees TEXT NOT NULL DEFAULT '0',
+        executed_at TEXT NOT NULL, note TEXT,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    CREATE TABLE quotes (
-        symbol TEXT, exchange TEXT,
-        price DECIMAL(18,4), prev_close DECIMAL(18,4),
-        day_high DECIMAL(18,4), day_low DECIMAL(18,4),
-        currency TEXT, source TEXT, fetched_at TIMESTAMP,
+    CREATE TABLE IF NOT EXISTS quotes (
+        symbol TEXT NOT NULL, exchange TEXT NOT NULL,
+        price TEXT, prev_close TEXT,
+        day_high TEXT, day_low TEXT,
+        currency TEXT, source TEXT, fetched_at TEXT,
         PRIMARY KEY (symbol, exchange)
     );
-    CREATE TABLE price_history (
-        symbol TEXT, exchange TEXT, date DATE,
-        open DECIMAL(18,4), high DECIMAL(18,4), low DECIMAL(18,4), close DECIMAL(18,4),
-        volume BIGINT,
+    CREATE TABLE IF NOT EXISTS price_history (
+        symbol TEXT NOT NULL, exchange TEXT NOT NULL, date TEXT NOT NULL,
+        open TEXT, high TEXT, low TEXT, close TEXT,
+        volume INTEGER,
         PRIMARY KEY (symbol, exchange, date)
     );
-    CREATE TABLE dividends (
-        symbol TEXT, exchange TEXT, ex_date DATE, pay_date DATE,
-        amount_per_share DECIMAL(18,4), source TEXT,
+    CREATE TABLE IF NOT EXISTS dividends (
+        symbol TEXT NOT NULL, exchange TEXT NOT NULL, ex_date TEXT NOT NULL, pay_date TEXT,
+        amount_per_share TEXT, source TEXT,
         PRIMARY KEY (symbol, exchange, ex_date)
     );
-    CREATE TABLE position_snapshots (
-        symbol TEXT, exchange TEXT,
-        quantity DECIMAL(18,8), avg_cost DECIMAL(18,4),
-        invested DECIMAL(18,4), market_value DECIMAL(18,4),
-        unrealized_pnl DECIMAL(18,4), unrealized_pnl_pct DECIMAL(9,4),
-        realized_pnl DECIMAL(18,4), day_change_pct DECIMAL(9,4),
-        score SMALLINT, score_breakdown JSON, computed_at TIMESTAMP,
+    CREATE TABLE IF NOT EXISTS position_snapshots (
+        symbol TEXT NOT NULL, exchange TEXT NOT NULL,
+        quantity TEXT, avg_cost TEXT,
+        invested TEXT, market_value TEXT,
+        unrealized_pnl TEXT, unrealized_pnl_pct TEXT,
+        realized_pnl TEXT, day_change_pct TEXT,
+        score INTEGER, score_breakdown TEXT, computed_at TEXT,
         PRIMARY KEY (symbol, exchange)
     );
-    CREATE TABLE search_cache (
-        query TEXT PRIMARY KEY, results JSON, fetched_at TIMESTAMP
+    CREATE TABLE IF NOT EXISTS search_cache (
+        query TEXT PRIMARY KEY, results TEXT, fetched_at TEXT
     );
     "#,
 )];
@@ -989,7 +1000,7 @@ pub const MIGRATIONS: &[(i32, &str)] = &[(
 ```rust
 use crate::storage::schema::{checksum, MIGRATIONS};
 use anyhow::Context;
-use duckdb::Connection;
+use rusqlite::{Connection, OptionalExtension};
 use std::path::Path;
 
 pub struct Db {
@@ -1010,7 +1021,7 @@ mod tests {
     fn migrations_are_idempotent_on_reopen() {
         // In-memory cannot reopen; use a temp file path.
         let tmp = tempfile::tempdir().unwrap();
-        let path = tmp.path().join("w.duckdb");
+        let path = tmp.path().join("w.db");
         { let _ = Db::open(&path).unwrap(); }
         let db2 = Db::open(&path).unwrap();
         assert_eq!(db2.schema_version().unwrap(), 1);
@@ -1028,14 +1039,14 @@ Expected: FAIL — methods not found.
 ```rust
 impl Db {
     pub fn open(path: &Path) -> anyhow::Result<Db> {
-        let conn = Connection::open(path).context("open duckdb")?;
+        let conn = Connection::open(path).context("open sqlite")?;
         let db = Db { conn };
         db.migrate()?;
         Ok(db)
     }
 
     pub fn open_in_memory() -> anyhow::Result<Db> {
-        let conn = Connection::open_in_memory().context("open in-memory duckdb")?;
+        let conn = Connection::open_in_memory().context("open in-memory sqlite")?;
         let db = Db { conn };
         db.migrate()?;
         Ok(db)
@@ -1043,18 +1054,18 @@ impl Db {
 
     fn migrate(&self) -> anyhow::Result<()> {
         self.conn.execute_batch(
-            "CREATE TABLE IF NOT EXISTS schema_version (version INTEGER PRIMARY KEY, applied_at TIMESTAMP, checksum TEXT);",
+            "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT, checksum TEXT);",
         )?;
         for (version, sql) in MIGRATIONS {
             let sum = checksum(sql);
             let recorded: Option<String> = self
                 .conn
                 .query_row(
-                    "SELECT checksum FROM schema_version WHERE version = ?",
-                    [version],
+                    "SELECT checksum FROM schema_migrations WHERE version = ?1",
+                    rusqlite::params![version],
                     |r| r.get(0),
                 )
-                .ok();
+                .optional()?;
             match recorded {
                 Some(existing) if existing != sum => {
                     anyhow::bail!(
@@ -1066,8 +1077,8 @@ impl Db {
                 None => {
                     self.conn.execute_batch(sql)?;
                     self.conn.execute(
-                        "INSERT INTO schema_version (version, applied_at, checksum) VALUES (?, now(), ?)",
-                        duckdb::params![version, sum],
+                        "INSERT INTO schema_migrations (version, applied_at, checksum) VALUES (?1, datetime('now'), ?2)",
+                        rusqlite::params![version, sum],
                     )?;
                 }
             }
@@ -1078,7 +1089,7 @@ impl Db {
     pub fn schema_version(&self) -> anyhow::Result<i32> {
         let v: i32 = self
             .conn
-            .query_row("SELECT COALESCE(MAX(version), 0) FROM schema_version", [], |r| r.get(0))?;
+            .query_row("SELECT COALESCE(MAX(version), 0) FROM schema_migrations", [], |r| r.get(0))?;
         Ok(v)
     }
 }
@@ -1091,12 +1102,14 @@ Add line: `pub mod storage;`
 - [ ] **Step 7: Run to verify pass**
 
 Run: `cargo test storage::db`
-Expected: PASS (2 tests). First build is slow (DuckDB bundled compiles).
+Expected: PASS (2 tests). First build is slow (rusqlite bundled compiles).
+
+- [ ] **Done when:** `cargo t storage::db` passes (2 tests: `fresh_db_migrates_to_latest_version`, `migrations_are_idempotent_on_reopen`). Checksum mismatch bails with a clear message.
 
 - [ ] **Step 8: Commit**
 
 ```bash
-git add -A && git commit -m "feat(storage): DuckDB open + checksummed migrations"
+git add -A && git commit -m "feat(storage): SQLite open + checksummed migrations"
 ```
 
 ---
@@ -1199,7 +1212,7 @@ Expected: FAIL — methods not found.
 - [ ] **Step 3: Implement query methods (above `tests`)**
 
 ```rust
-fn dec(s: String) -> anyhow::Result<Decimal> {
+fn parse_dec(s: String) -> anyhow::Result<Decimal> {
     Ok(Decimal::from_str(s.trim())?)
 }
 
@@ -1224,71 +1237,66 @@ impl Db {
         let side = match t.side { Side::Buy => "BUY", Side::Sell => "SELL" };
         self.conn.execute(
             "INSERT INTO transactions (symbol, exchange, side, quantity, price, fees, executed_at, note)
-             VALUES (?, ?, ?, CAST(? AS DECIMAL(18,8)), CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(18,4)), ?, ?)",
-            duckdb::params![
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            rusqlite::params![
                 t.asset.symbol, t.asset.exchange, side,
                 t.quantity.to_string(), t.price.to_string(), t.fees.to_string(),
-                t.executed_at.to_string(), t.note
+                t.executed_at, t.note
             ],
         )?;
-        let id: i64 = self.conn.query_row("SELECT currval('tx_id_seq')", [], |r| r.get(0))?;
-        Ok(id)
+        Ok(self.conn.last_insert_rowid())
     }
 
     pub fn list_transactions(&self, asset: Option<&AssetId>) -> anyhow::Result<Vec<Trade>> {
-        let base = "SELECT id, symbol, exchange, side,
-                    CAST(quantity AS VARCHAR), CAST(price AS VARCHAR), CAST(fees AS VARCHAR),
-                    executed_at, note FROM transactions";
-        let mut out = Vec::new();
-        let mut push = |row: &duckdb::Row| -> duckdb::Result<()> { let _ = row; Ok(()) };
-        let _ = &mut push;
-        let map = |row: &duckdb::Row| -> anyhow::Result<Trade> {
-            let side_s: String = row.get(3)?;
-            Ok(Trade {
-                id: row.get(0)?,
-                asset: AssetId { symbol: row.get(1)?, exchange: row.get(2)? },
-                side: if side_s == "BUY" { Side::Buy } else { Side::Sell },
-                quantity: dec(row.get(4)?)?,
-                price: dec(row.get(5)?)?,
-                fees: dec(row.get(6)?)?,
-                executed_at: row.get::<_, chrono::NaiveDate>(7)?,
-                note: row.get(8)?,
-            })
+        let base = "SELECT id, symbol, exchange, side, quantity, price, fees, executed_at, note FROM transactions";
+        let map_row = |r: &rusqlite::Row| -> rusqlite::Result<(i64, String, String, String, String, String, String, chrono::NaiveDate, Option<String>)> {
+            Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?, r.get(5)?, r.get(6)?, r.get(7)?, r.get(8)?))
         };
-        if let Some(a) = asset {
-            let sql = format!("{base} WHERE symbol = ? AND exchange = ? ORDER BY executed_at, id");
+        let mut out = Vec::new();
+        let rows: Vec<_> = if let Some(a) = asset {
+            let sql = format!("{base} WHERE symbol = ?1 AND exchange = ?2 ORDER BY executed_at, id");
             let mut stmt = self.conn.prepare(&sql)?;
-            let rows = stmt.query_map(duckdb::params![a.symbol, a.exchange], |r| Ok(map(r)))?;
-            for r in rows { out.push(r??); }
+            stmt.query_map(rusqlite::params![a.symbol, a.exchange], map_row)?.collect::<rusqlite::Result<Vec<_>>>()?
         } else {
             let sql = format!("{base} ORDER BY executed_at, id");
             let mut stmt = self.conn.prepare(&sql)?;
-            let rows = stmt.query_map([], |r| Ok(map(r)))?;
-            for r in rows { out.push(r??); }
+            stmt.query_map([], map_row)?.collect::<rusqlite::Result<Vec<_>>>()?
+        };
+        for (id, sym, exch, side_s, qty, price, fees, executed_at, note) in rows {
+            out.push(Trade {
+                id,
+                asset: AssetId { symbol: sym, exchange: exch },
+                side: if side_s == "BUY" { Side::Buy } else { Side::Sell },
+                quantity: parse_dec(qty)?,
+                price: parse_dec(price)?,
+                fees: parse_dec(fees)?,
+                executed_at,
+                note,
+            });
         }
         Ok(out)
     }
 
     pub fn delete_transaction(&self, id: i64) -> anyhow::Result<bool> {
-        let n = self.conn.execute("DELETE FROM transactions WHERE id = ?", [id])?;
+        let n = self.conn.execute("DELETE FROM transactions WHERE id = ?1", rusqlite::params![id])?;
         Ok(n > 0)
     }
 
     pub fn distinct_held_assets(&self) -> anyhow::Result<Vec<AssetId>> {
         let mut stmt = self.conn.prepare(
             "SELECT symbol, exchange,
-                    SUM(CASE WHEN side='BUY' THEN quantity ELSE -quantity END) AS net
+                    SUM(CASE WHEN side='BUY' THEN CAST(quantity AS REAL) ELSE -CAST(quantity AS REAL) END) AS net
              FROM transactions GROUP BY symbol, exchange HAVING net <> 0",
         )?;
         let rows = stmt.query_map([], |r| Ok(AssetId { symbol: r.get(0)?, exchange: r.get(1)? }))?;
-        Ok(rows.collect::<duckdb::Result<Vec<_>>>()?)
+        Ok(rows.collect::<rusqlite::Result<Vec<_>>>()?)
     }
 
     pub fn upsert_quote(&self, q: &Quote) -> anyhow::Result<()> {
         self.conn.execute(
             "INSERT OR REPLACE INTO quotes (symbol, exchange, price, prev_close, day_high, day_low, currency, source, fetched_at)
-             VALUES (?, ?, CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(18,4)), ?, ?, ?)",
-            duckdb::params![
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            rusqlite::params![
                 q.asset.symbol, q.asset.exchange, q.price.to_string(), q.prev_close.to_string(),
                 q.day_high.to_string(), q.day_low.to_string(), q.currency, q.source, q.fetched_at
             ],
@@ -1297,28 +1305,32 @@ impl Db {
     }
 
     pub fn get_quote(&self, asset: &AssetId) -> anyhow::Result<Option<Quote>> {
-        let mut stmt = self.conn.prepare(
-            "SELECT CAST(price AS VARCHAR), CAST(prev_close AS VARCHAR), CAST(day_high AS VARCHAR),
-                    CAST(day_low AS VARCHAR), currency, source, fetched_at
-             FROM quotes WHERE symbol = ? AND exchange = ?",
-        )?;
-        let mut rows = stmt.query(duckdb::params![asset.symbol, asset.exchange])?;
-        if let Some(r) = rows.next()? {
-            Ok(Some(Quote {
+        use rusqlite::OptionalExtension;
+        let result = self.conn.query_row(
+            "SELECT price, prev_close, day_high, day_low, currency, source, fetched_at
+             FROM quotes WHERE symbol = ?1 AND exchange = ?2",
+            rusqlite::params![asset.symbol, asset.exchange],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?,
+                    r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, String>(5)?,
+                    r.get::<_, chrono::NaiveDateTime>(6)?)),
+        ).optional()?;
+        match result {
+            Some((price, prev_close, day_high, day_low, currency, source, fetched_at)) => Ok(Some(Quote {
                 asset: asset.clone(),
-                price: dec(r.get(0)?)?, prev_close: dec(r.get(1)?)?,
-                day_high: dec(r.get(2)?)?, day_low: dec(r.get(3)?)?,
-                currency: r.get(4)?, source: r.get(5)?, fetched_at: r.get(6)?,
-            }))
-        } else { Ok(None) }
+                price: parse_dec(price)?, prev_close: parse_dec(prev_close)?,
+                day_high: parse_dec(day_high)?, day_low: parse_dec(day_low)?,
+                currency, source, fetched_at,
+            })),
+            None => Ok(None),
+        }
     }
 
     pub fn upsert_candles(&self, asset: &AssetId, candles: &[Candle]) -> anyhow::Result<()> {
         for c in candles {
             self.conn.execute(
                 "INSERT OR REPLACE INTO price_history (symbol, exchange, date, open, high, low, close, volume)
-                 VALUES (?, ?, ?, CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(18,4)), ?)",
-                duckdb::params![asset.symbol, asset.exchange, c.date.to_string(),
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                rusqlite::params![asset.symbol, asset.exchange, c.date,
                     c.open.to_string(), c.high.to_string(), c.low.to_string(), c.close.to_string(), c.volume],
             )?;
         }
@@ -1327,18 +1339,17 @@ impl Db {
 
     pub fn get_candles(&self, asset: &AssetId) -> anyhow::Result<Vec<Candle>> {
         let mut stmt = self.conn.prepare(
-            "SELECT date, CAST(open AS VARCHAR), CAST(high AS VARCHAR), CAST(low AS VARCHAR),
-                    CAST(close AS VARCHAR), volume FROM price_history
-             WHERE symbol = ? AND exchange = ? ORDER BY date",
+            "SELECT date, open, high, low, close, volume FROM price_history
+             WHERE symbol = ?1 AND exchange = ?2 ORDER BY date",
         )?;
-        let rows = stmt.query_map(duckdb::params![asset.symbol, asset.exchange], |r| {
+        let rows = stmt.query_map(rusqlite::params![asset.symbol, asset.exchange], |r| {
             Ok((r.get::<_, chrono::NaiveDate>(0)?, r.get::<_, String>(1)?, r.get::<_, String>(2)?,
                 r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, i64>(5)?))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (date, o, h, l, c, v) = row?;
-            out.push(Candle { date, open: dec(o)?, high: dec(h)?, low: dec(l)?, close: dec(c)?, volume: v });
+            out.push(Candle { date, open: parse_dec(o)?, high: parse_dec(h)?, low: parse_dec(l)?, close: parse_dec(c)?, volume: v });
         }
         Ok(out)
     }
@@ -1347,9 +1358,9 @@ impl Db {
         for d in divs {
             self.conn.execute(
                 "INSERT OR REPLACE INTO dividends (symbol, exchange, ex_date, pay_date, amount_per_share, source)
-                 VALUES (?, ?, ?, ?, CAST(? AS DECIMAL(18,4)), ?)",
-                duckdb::params![asset.symbol, asset.exchange, d.ex_date.to_string(),
-                    d.pay_date.map(|p| p.to_string()), d.amount_per_share.to_string(), "provider"],
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                rusqlite::params![asset.symbol, asset.exchange, d.ex_date, d.pay_date,
+                    d.amount_per_share.to_string(), "provider"],
             )?;
         }
         Ok(())
@@ -1357,16 +1368,16 @@ impl Db {
 
     pub fn get_dividends(&self, asset: &AssetId) -> anyhow::Result<Vec<Dividend>> {
         let mut stmt = self.conn.prepare(
-            "SELECT ex_date, pay_date, CAST(amount_per_share AS VARCHAR) FROM dividends
-             WHERE symbol = ? AND exchange = ? ORDER BY ex_date",
+            "SELECT ex_date, pay_date, amount_per_share FROM dividends
+             WHERE symbol = ?1 AND exchange = ?2 ORDER BY ex_date",
         )?;
-        let rows = stmt.query_map(duckdb::params![asset.symbol, asset.exchange], |r| {
+        let rows = stmt.query_map(rusqlite::params![asset.symbol, asset.exchange], |r| {
             Ok((r.get::<_, chrono::NaiveDate>(0)?, r.get::<_, Option<chrono::NaiveDate>>(1)?, r.get::<_, String>(2)?))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (ex_date, pay_date, amt) = row?;
-            out.push(Dividend { asset: asset.clone(), ex_date, pay_date, amount_per_share: dec(amt)? });
+            out.push(Dividend { asset: asset.clone(), ex_date, pay_date, amount_per_share: parse_dec(amt)? });
         }
         Ok(out)
     }
@@ -1377,14 +1388,12 @@ impl Db {
             "INSERT OR REPLACE INTO position_snapshots
              (symbol, exchange, quantity, avg_cost, invested, market_value, unrealized_pnl,
               unrealized_pnl_pct, realized_pnl, day_change_pct, score, score_breakdown, computed_at)
-             VALUES (?, ?, CAST(? AS DECIMAL(18,8)), CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(18,4)),
-                     CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(9,4)),
-                     CAST(? AS DECIMAL(18,4)), CAST(? AS DECIMAL(9,4)), ?, ?, ?)",
-            duckdb::params![
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+            rusqlite::params![
                 s.asset.symbol, s.asset.exchange, s.quantity.to_string(), s.avg_cost.to_string(),
                 s.invested.to_string(), s.market_value.to_string(), s.unrealized_pnl.to_string(),
                 s.unrealized_pnl_pct.to_string(), s.realized_pnl.to_string(), s.day_change_pct.to_string(),
-                s.score as i16, breakdown, s.computed_at
+                s.score as i64, breakdown, s.computed_at
             ],
         )?;
         Ok(())
@@ -1392,26 +1401,25 @@ impl Db {
 
     pub fn read_snapshots(&self) -> anyhow::Result<Vec<PositionSnapshot>> {
         let mut stmt = self.conn.prepare(
-            "SELECT symbol, exchange, CAST(quantity AS VARCHAR), CAST(avg_cost AS VARCHAR),
-                    CAST(invested AS VARCHAR), CAST(market_value AS VARCHAR), CAST(unrealized_pnl AS VARCHAR),
-                    CAST(unrealized_pnl_pct AS VARCHAR), CAST(realized_pnl AS VARCHAR), CAST(day_change_pct AS VARCHAR),
-                    score, score_breakdown, computed_at FROM position_snapshots ORDER BY symbol",
+            "SELECT symbol, exchange, quantity, avg_cost, invested, market_value, unrealized_pnl,
+                    unrealized_pnl_pct, realized_pnl, day_change_pct, score, score_breakdown, computed_at
+             FROM position_snapshots ORDER BY symbol",
         )?;
         let rows = stmt.query_map([], |r| {
             Ok((
                 AssetId { symbol: r.get(0)?, exchange: r.get(1)? },
                 r.get::<_, String>(2)?, r.get::<_, String>(3)?, r.get::<_, String>(4)?, r.get::<_, String>(5)?,
                 r.get::<_, String>(6)?, r.get::<_, String>(7)?, r.get::<_, String>(8)?, r.get::<_, String>(9)?,
-                r.get::<_, i16>(10)?, r.get::<_, String>(11)?, r.get::<_, chrono::NaiveDateTime>(12)?,
+                r.get::<_, i64>(10)?, r.get::<_, String>(11)?, r.get::<_, chrono::NaiveDateTime>(12)?,
             ))
         })?;
         let mut out = Vec::new();
         for row in rows {
             let (asset, qty, avg, inv, mv, upnl, upct, rpnl, dpct, score, bd, computed_at) = row?;
             out.push(PositionSnapshot {
-                asset, quantity: dec(qty)?, avg_cost: dec(avg)?, invested: dec(inv)?, market_value: dec(mv)?,
-                unrealized_pnl: dec(upnl)?, unrealized_pnl_pct: dec(upct)?, realized_pnl: dec(rpnl)?,
-                day_change_pct: dec(dpct)?, score: score as u8,
+                asset, quantity: parse_dec(qty)?, avg_cost: parse_dec(avg)?, invested: parse_dec(inv)?,
+                market_value: parse_dec(mv)?, unrealized_pnl: parse_dec(upnl)?, unrealized_pnl_pct: parse_dec(upct)?,
+                realized_pnl: parse_dec(rpnl)?, day_change_pct: parse_dec(dpct)?, score: score as u8,
                 score_breakdown: serde_json::from_str(&bd)?, computed_at,
             });
         }
@@ -1424,6 +1432,8 @@ impl Db {
 
 Run: `cargo test storage::queries`
 Expected: PASS (4 tests). Remove the dead `push` placeholder lines if the compiler warns.
+
+- [ ] **Done when:** `cargo t storage::queries` passes (4 tests: `insert_and_list_transactions`, `delete_transaction_removes_it`, `quote_roundtrip`, `held_assets_excludes_fully_sold`).
 
 - [ ] **Step 5: Commit**
 
@@ -1622,6 +1632,8 @@ Add `pub mod providers;` to `src/lib.rs`.
 Run: `cargo test providers::tests::chain_falls_through_to_working_provider`
 Expected: PASS.
 
+- [ ] **Done when:** `cargo t providers` passes (1 test: `chain_falls_through_to_working_provider`). `Chain` tries each provider in order and returns first `Ok`.
+
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -1818,6 +1830,8 @@ In `src/providers/mod.rs`, ensure `AnyProvider::Yahoo(YahooProvider)` is constru
 Run: `cargo test providers::yahoo`
 Expected: PASS (1 test).
 
+- [ ] **Done when:** `cargo t providers::yahoo` passes (1 test: `parses_quote_from_chart`). Quote price, prev_close, currency, source all parsed correctly; candles length and last close correct; dividends count and amount_per_share correct. `source` field equals `"yahoo"`.
+
 - [ ] **Step 7: Commit**
 
 ```bash
@@ -1992,6 +2006,8 @@ impl Provider for BrapiProvider {
 Run: `cargo test providers::brapi`
 Expected: PASS.
 
+- [ ] **Done when:** `cargo t providers::brapi` passes (1 test: `parses_brapi_quote_and_history`). Quote price correct, `source` equals `"brapi"`, candles length 2, dividend `amount_per_share` correct.
+
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -2125,6 +2141,8 @@ Add `pub mod ipc;` to `src/lib.rs`.
 Run: `cargo test ipc`
 Expected: PASS (3 tests).
 
+- [ ] **Done when:** `cargo t ipc` passes (3 tests: `request_envelope_shape`, `ok_response_shape`, `err_response_shape`). `type` field is `"request"`, `action` serializes as `"Ping"`, `status` is `"ok"` or `"error"`, error code serializes as `"NOT_FOUND"`.
+
 - [ ] **Step 5: Commit**
 
 ```bash
@@ -2144,7 +2162,7 @@ git add -A && git commit -m "feat(ipc): request/response envelope + newline fram
 - Consumes: `storage::db::Db`, `storage::queries::PositionSnapshot`, `core::*`, `providers::Chain`, `ipc::*`, `config::Config`.
 - Produces: `daemon::recompute::recompute_asset(db, asset, weights) -> anyhow::Result<PositionSnapshot>` (reads trades+quote+candles+dividends, runs core, writes snapshot).
 - Produces: `daemon::server::handle(db: &Db, chain: &Chain, cfg: &Config, req: Request) -> Response` dispatching by `action`.
-- Produces: `daemon::run(cfg: Config) -> anyhow::Result<()>` — binds the Unix socket, owns the `Db`, spawns the poller (Task 14), serves requests. Uses a single-threaded view of `Db` guarded by a `tokio::sync::Mutex` (DuckDB `Connection` is not `Sync`).
+- Produces: `daemon::run(cfg: Config) -> anyhow::Result<()>` — binds the Unix socket, owns the `Db`, spawns the poller (Task 14), serves requests. Uses a single-threaded view of `Db` guarded by a `tokio::sync::Mutex` (rusqlite `Connection` is not `Sync`).
 
 - [ ] **Step 1: Implement `recompute_asset` in `src/daemon/recompute.rs`**
 
@@ -2400,6 +2418,8 @@ Add `pub mod daemon;` to `src/lib.rs`. (Also add `pub mod portfolio;` now as an 
 Run: `cargo test --test daemon_ipc`
 Expected: PASS.
 
+- [ ] **Done when:** `cargo test --test daemon_ipc` passes (1 test: `add_then_get_positions_via_handler`). `AddTransaction` returns `status:"ok"`, `GetPositions` returns the inserted position with correct `symbol` and `quantity`.
+
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -2527,6 +2547,8 @@ async fn refresh_history(db: &Arc<Mutex<Db>>, chain: &Arc<Chain>, cfg: &Arc<Conf
 Run: `cargo test daemon::market_hours`
 Expected: PASS (3 tests).
 
+- [ ] **Done when:** `cargo t daemon::market_hours` passes (3 tests: `weekday_noon_is_open`, `weekend_is_closed`, `before_open_is_closed`). `is_open` returns `true` for weekdays 10:00–17:59 São Paulo time, `false` on weekends and before 10:00.
+
 - [ ] **Step 6: Commit**
 
 ```bash
@@ -2639,6 +2661,8 @@ pub fn import_csv(db: &Db, path: &str, weights: &ScoreWeights) -> anyhow::Result
 
 Run: `cargo test portfolio`
 Expected: PASS.
+
+- [ ] **Done when:** `cargo t portfolio` passes (1 test: `export_then_import_roundtrips`). `export_csv` returns count 2, written file has header + 2 rows. `import_csv` on that file inserts 2 transactions into a fresh DB, `list_transactions` returns 2 records.
 
 - [ ] **Step 5: Commit**
 
@@ -2801,6 +2825,8 @@ fn add_and_list_via_cli_autostarts_daemon() {
 Add `pub mod client;` to `src/lib.rs`. Add `pub mod tui;` too (Task 17 supplies `tui::run`; create a temporary `src/tui/mod.rs` with `pub async fn run() -> anyhow::Result<()> { Ok(()) }` so this task compiles).
 Run: `cargo test --test e2e -- --nocapture`
 Expected: PASS (daemon autostarts, add+list succeed).
+
+- [ ] **Done when:** `cargo test --test e2e` passes (1 test: `add_and_list_via_cli_autostarts_daemon`). `ltw add` exits successfully, `ltw list` stdout contains `"PETR4"`. Daemon autostarts when socket is absent.
 
 - [ ] **Step 5: Commit**
 
@@ -2989,6 +3015,8 @@ Run: `cargo test`
 Expected: PASS (whole suite).
 Manual: `cargo run -- add PETR4 100 30.00 --date 2026-01-02 && cargo run -- refresh && cargo run -- tui` — verify the table renders, `r` refreshes, `q` quits. (Requires network for `refresh`.)
 
+- [ ] **Done when:** `cargo t tui::views` passes (1 test: `renders_symbol_and_score`). Rendered buffer contains `"PETR4"` and `"73"`. `cargo test` (full suite) passes with no errors.
+
 - [ ] **Step 8: Commit**
 
 ```bash
@@ -2997,14 +3025,73 @@ git add -A && git commit -m "feat(tui): positions table with refresh and score c
 
 ---
 
+### Task 18: Distribution — cargo-dist (Linux + macOS, Homebrew, install script)
+
+**Goal:** Ship pre-compiled binaries for Linux (x86_64, aarch64) and macOS (x86_64, aarch64-apple-silicon) via GitHub Releases, with a Homebrew tap and a `curl | sh` install script. Windows excluded.
+
+**Tools:** `cargo-dist`.
+
+- [ ] **Step 1: Install cargo-dist**
+
+```bash
+cargo install cargo-dist --locked
+```
+
+- [ ] **Step 2: Init cargo-dist for this project**
+
+```bash
+cargo dist init
+```
+
+When prompted:
+- Targets: `x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin` — **do NOT add any Windows target**
+- CI: GitHub Actions
+- Installers: `shell` (curl install script) + `homebrew`
+- Homebrew tap: create a `homebrew-tap` repo under the same GitHub user/org
+
+- [ ] **Step 3: Verify generated files**
+
+Confirm these exist and are correct:
+- `.github/workflows/release.yml` — triggers on `v*` tags, builds all four targets
+- `dist-workspace.toml` or updated `Cargo.toml` `[workspace.metadata.dist]` block
+- No Windows target anywhere in the config
+
+- [ ] **Step 4: Add build deps to CI for Linux aarch64 cross-compilation**
+
+`rusqlite bundled` requires a C cross-compiler. In `.github/workflows/release.yml`, add a step before the build for the `aarch64-unknown-linux-gnu` runner:
+
+```yaml
+- name: Install cross-compile deps
+  if: matrix.target == 'aarch64-unknown-linux-gnu'
+  run: sudo apt-get install -y gcc-aarch64-linux-gnu
+```
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add -A && git commit -m "chore(dist): cargo-dist for Linux + macOS, Homebrew tap, install script"
+```
+
+- [ ] **Done when:** `cargo dist plan` lists exactly four targets (`x86_64-unknown-linux-gnu`, `aarch64-unknown-linux-gnu`, `x86_64-apple-darwin`, `aarch64-apple-darwin`), no Windows target, Homebrew formula path shown, shell installer shown.
+
+- [ ] **Step 6: Tag and verify (dry-run)**
+
+```bash
+cargo dist plan
+```
+
+Expected: plan lists four targets, no Windows, shows Homebrew formula path and shell installer.
+
+---
+
 ## Self-Review
 
 **Spec coverage:**
 - Single binary, three modes — Tasks 1, 13, 16, 17. ✔
-- Daemon sole DuckDB owner + Unix socket IPC — Tasks 12, 13. ✔
+- Daemon sole SQLite owner + Unix socket IPC — Tasks 12, 13. ✔
 - Module map (core/storage/providers/ipc/daemon/tui/main) — Tasks 2–17. ✔
 - XDG paths — Task 1. ✔
-- DuckDB schema incl. `position_snapshots`, `search_cache`, composite `(symbol,exchange)` PK, `schema_version(version, applied_at, checksum)` — Tasks 7, 8. ✔
+- SQLite schema incl. `position_snapshots`, `search_cache`, composite `(symbol,exchange)` PK, `schema_migrations(version, applied_at, checksum)` — Tasks 7, 8. ✔
 - Money as Decimal, never float — global constraint + Tasks 3–8. ✔
 - IPC envelope `{id,type,action,payload}` / `{id,status,data|error}`, error codes — Task 12. ✔
 - Calculations: P&L (Task 3), valuation (Task 4), signals (Task 5), dividends (Tasks 5/6/11), score with the five sub-scores incl. "distance from cost basis vs trend" weight 20 — Task 6. ✔
