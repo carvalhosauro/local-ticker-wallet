@@ -19,12 +19,30 @@ enum Mode {
     Detail(Box<DetailData>),
 }
 
+/// RAII guard that restores the terminal on drop (covers `?`-errors and panics).
+struct TermGuard;
+
+impl Drop for TermGuard {
+    fn drop(&mut self) {
+        let _ = disable_raw_mode();
+        let _ = execute!(
+            std::io::stdout(),
+            LeaveAlternateScreen,
+            crossterm::cursor::Show
+        );
+    }
+}
+
 pub async fn run() -> anyhow::Result<()> {
     let mut rows = client::fetch_positions().await.unwrap_or_default();
     let mut selected = 0usize;
     let mut mode = Mode::List;
 
     enable_raw_mode()?;
+    // Guard is installed immediately after raw mode is enabled so that any
+    // subsequent `?` or panic still triggers teardown via Drop.
+    let _guard = TermGuard;
+
     let mut stdout = std::io::stdout();
     execute!(stdout, EnterAlternateScreen)?;
     let mut term = Terminal::new(CrosstermBackend::new(stdout))?;
@@ -76,8 +94,6 @@ pub async fn run() -> anyhow::Result<()> {
         }
     };
 
-    disable_raw_mode()?;
-    execute!(term.backend_mut(), LeaveAlternateScreen)?;
-    term.show_cursor()?;
+    // `_guard` drops here (normal exit) and runs teardown.
     res
 }
