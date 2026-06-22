@@ -1,6 +1,13 @@
 use crate::config::Locale;
 use crate::core::format::FormatLocale;
 use crate::i18n::Bundle;
+use crate::tui::overlays::add_transaction::AddTransactionForm;
+
+/// Active modal overlay (at most one).
+#[derive(Debug, Clone)]
+pub enum Overlay {
+    AddTransaction(AddTransactionForm),
+}
 
 /// Which primary screen is active.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -24,7 +31,7 @@ impl Toast {
         Self {
             message: message.into(),
             is_error: false,
-            ticks_left: 12,
+            ticks_left: 25,
         }
     }
 
@@ -61,6 +68,7 @@ pub struct App {
     pub sort_by_score: bool,
     pub search_pending: bool,
     pub search_deadline: Option<Instant>,
+    pub overlay: Option<Overlay>,
 }
 
 impl App {
@@ -78,6 +86,7 @@ impl App {
             sort_by_score: false,
             search_pending: false,
             search_deadline: None,
+            overlay: None,
         }
     }
 
@@ -109,5 +118,23 @@ impl App {
 
     pub fn go_ledger(&mut self) {
         self.screen = Screen::Ledger;
+    }
+
+    pub fn has_overlay(&self) -> bool {
+        self.overlay.is_some()
+    }
+
+    pub fn open_add_transaction(
+        &mut self,
+        symbol: Option<String>,
+        price_hint: Option<String>,
+    ) {
+        self.overlay = Some(Overlay::AddTransaction(AddTransactionForm::new(
+            symbol, price_hint,
+        )));
+    }
+
+    pub fn close_overlay(&mut self) {
+        self.overlay = None;
     }
 }

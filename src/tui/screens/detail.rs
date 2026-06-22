@@ -114,6 +114,14 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
                 ))),
             }
         }
+        KeyCode::Char('a') => {
+            if let Some(detail) = &data.detail {
+                app.open_add_transaction(
+                    Some(detail.symbol.clone()),
+                    Some(detail.avg_cost.to_string()),
+                );
+            }
+        }
         _ => {}
     }
     KeyOutcome::Continue

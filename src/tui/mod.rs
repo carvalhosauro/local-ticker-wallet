@@ -2,6 +2,7 @@ pub mod app;
 pub mod client;
 pub mod input;
 pub mod models;
+pub mod overlays;
 pub mod screens;
 pub mod state;
 pub mod widgets;
@@ -20,6 +21,13 @@ use app::{App, Toast};
 use input::KeyOutcome;
 use state::UiData;
 use widgets::status_bar;
+
+fn render_ui(f: &mut ratatui::Frame, app: &App, data: &UiData, main_area: ratatui::layout::Rect) {
+    screens::render(f, main_area, app, data);
+    if app.has_overlay() {
+        overlays::render(f, main_area, app);
+    }
+}
 
 /// RAII guard that restores the terminal on drop (covers `?`-errors and panics).
 struct TermGuard;
@@ -63,7 +71,7 @@ pub async fn run() -> anyhow::Result<()> {
             .split(f.area());
 
             status_bar::render_status_bar(f, chunks[0], &app);
-            screens::render(f, chunks[1], &app, &data);
+            render_ui(f, &app, &data, chunks[1]);
 
             if app.toast.is_some() {
                 status_bar::render_toast(f, chunks[2], &app);

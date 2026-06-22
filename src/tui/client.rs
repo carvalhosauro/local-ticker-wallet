@@ -120,6 +120,32 @@ pub async fn fetch_ledger() -> anyhow::Result<Vec<LedgerRow>> {
     Ok(rows)
 }
 
+/// Submits a new trade via IPC.
+pub async fn add_transaction(
+    symbol: &str,
+    side: &str,
+    quantity: &str,
+    price: &str,
+    fees: &str,
+    executed_at: &str,
+    note: Option<&str>,
+) -> anyhow::Result<i64> {
+    let data = send(
+        Action::AddTransaction,
+        serde_json::json!({
+            "symbol": symbol,
+            "side": side,
+            "quantity": quantity,
+            "price": price,
+            "fees": fees,
+            "executed_at": executed_at,
+            "note": note,
+        }),
+    )
+    .await?;
+    Ok(data["id"].as_i64().unwrap_or(0))
+}
+
 /// Marks search hits that are already held in the portfolio.
 pub fn mark_portfolio_hits(results: &mut [SearchResultRow], held: &[PositionRow]) {
     let held_syms: std::collections::HashSet<&str> =

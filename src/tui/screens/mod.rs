@@ -23,6 +23,13 @@ pub fn render(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &App
 }
 
 pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyOutcome {
+    if app.has_overlay() {
+        if matches!(code, KeyCode::Char('q')) {
+            return KeyOutcome::Quit;
+        }
+        return crate::tui::overlays::handle_key(app, data, code).await;
+    }
+
     if let Some(outcome) = handle_global_key(app, data, code).await {
         return outcome;
     }
