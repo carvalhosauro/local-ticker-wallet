@@ -14,56 +14,35 @@
 
 ## Phase 1 — Foundation (this branch)
 
-### Task 1: Locale in config
+### Task 1: Locale in config — DONE (PR #2)
 
-**Files:**
-- Modify: `src/config.rs`
-- Test: `src/config.rs` (unit tests)
+### Task 2: i18n bundles — DONE (PR #2)
 
-- [ ] Add `Locale` enum (`pt-BR`, `en`) with serde `rename_all = "kebab-case"`
-- [ ] Add `locale: Locale` to `Config` (default `pt-BR`)
-- [ ] Test partial JSON and roundtrip
+### Task 3: Number formatting — DONE (PR #2)
 
-### Task 2: i18n bundles
+### Task 4: TUI app shell — DONE (PR #2)
 
-**Files:**
-- Create: `src/i18n/mod.rs`, `src/i18n/pt_br.rs`, `src/i18n/en.rs`
-- Modify: `src/lib.rs`
+### Task 5: Search & Ledger stubs — DONE (PR #2)
 
-- [ ] `Bundle` struct with all TUI strings (nav, columns, detail labels, score names, hints, errors)
-- [ ] `bundle(locale) -> &'static Bundle`
-- [ ] Human-readable score sub-score labels (not code names)
+### Task 6: Screen decomposition — DONE (PR #3)
 
-### Task 3: Number formatting
+Each screen module owns its `render`, `handle_key`, and (for Search) `tick`:
 
-**Files:**
-- Create: `src/core/format.rs`
-- Modify: `src/core/mod.rs`
+```
+src/tui/
+  mod.rs          — thin event loop
+  models.rs       — shared row types
+  state.rs        — UiData
+  input.rs        — KeyOutcome
+  screens/
+    mod.rs        — dispatch render / keys / tick
+    portfolio.rs
+    detail.rs
+    search.rs
+    ledger.rs
+```
 
-- [ ] `FormatLocale` mirroring config locale
-- [ ] `format_price`, `format_money`, `format_pct`, `format_quantity`, `format_score_sub`
-- [ ] Unit tests for pt-BR and en separators
-
-### Task 4: TUI app shell
-
-**Files:**
-- Create: `src/tui/app.rs`, `src/tui/screens/mod.rs`, `src/tui/widgets/mod.rs`, `src/tui/widgets/status_bar.rs`, `src/tui/widgets/toast.rs`
-- Modify: `src/tui/mod.rs`, `src/tui/views.rs`, `src/tui/client.rs`
-
-- [ ] `Screen` enum: Portfolio, Detail, Search, Ledger
-- [ ] `App` holds locale, bundle, screen, toast, selection state
-- [ ] Status bar with tab hints `[1] Portfolio [2] Search [3] Ledger`
-- [ ] Toast for IPC errors (replace silent `unwrap_or_default`)
-- [ ] Load `Config::load()` at TUI start for locale
-
-### Task 5: Search & Ledger stubs
-
-**Files:**
-- Create: `src/tui/screens/search.rs`, `src/tui/screens/ledger.rs`, `src/tui/screens/portfolio.rs`, `src/tui/screens/detail.rs`
-
-- [ ] Search: query input placeholder, empty results area, footer hints
-- [ ] Ledger: placeholder “coming soon” or basic `ListTransactions` table
-- [ ] Navigation: `1`/`2`/`3`, `/` jumps to Search, `Esc` back
+`views.rs` removed.
 
 ---
 

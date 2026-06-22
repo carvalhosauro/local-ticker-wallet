@@ -1,7 +1,7 @@
 use crate::core::format::parse_decimal;
 use crate::core::types::Side;
 use crate::ipc::{Action, Request, Response};
-use crate::tui::views::{DetailData, LedgerRow, PositionRow, SearchResultRow};
+use crate::tui::models::{DetailData, LedgerRow, PositionRow, SearchResultRow};
 
 async fn send(action: Action, payload: serde_json::Value) -> anyhow::Result<serde_json::Value> {
     let resp = crate::client::send(Request::new(action, payload)).await?;
