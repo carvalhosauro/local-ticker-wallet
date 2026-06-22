@@ -1,0 +1,12 @@
+{
+  "results": [ {
+    "symbol": "PETR4", "currency": "BRL",
+    "regularMarketPrice": 38.50, "regularMarketPreviousClose": 37.90,
+    "regularMarketDayHigh": 38.90, "regularMarketDayLow": 37.80,
+    "historicalDataPrice": [
+      { "date": 1735693200, "open": 37.0, "high": 38.0, "low": 36.5, "close": 37.9, "volume": 1000 },
+      { "date": 1735779600, "open": 38.0, "high": 39.0, "low": 37.5, "close": 38.5, "volume": 1200 }
+    ],
+    "dividendsData": { "cashDividends": [ { "rate": 0.55, "paymentDate": "2026-01-15", "lastDatePrior": "2026-01-02" } ] }
+  } ]
+}
