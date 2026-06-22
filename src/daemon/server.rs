@@ -143,7 +143,16 @@ pub async fn handle(db: &Arc<Mutex<Db>>, chain: &Chain, cfg: &Config, req: Reque
                             .ok_or_else(|| anyhow::anyhow!("symbol required"))?,
                     );
                     let snap = recompute_asset(&d, &asset, &cfg.score_weights)?;
-                    Ok(snapshot_json(&snap))
+                    let closes: Vec<String> = d
+                        .get_candles(&asset)?
+                        .into_iter()
+                        .map(|c| c.close.to_string())
+                        .collect();
+                    let mut v = snapshot_json(&snap);
+                    if let Some(obj) = v.as_object_mut() {
+                        obj.insert("chart_closes".into(), serde_json::json!(closes));
+                    }
+                    Ok(v)
                 })(),
                 ErrorCode::Internal,
             )
