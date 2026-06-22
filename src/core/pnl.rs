@@ -59,6 +59,33 @@ impl Position {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub struct Valuation {
+    pub market_value: Decimal,
+    pub unrealized_pnl: Decimal,
+    pub unrealized_pnl_pct: Decimal,
+    pub day_change_pct: Decimal,
+}
+
+impl Valuation {
+    pub fn compute(position: &Position, quote: &crate::core::types::Quote) -> Valuation {
+        let hundred = Decimal::from(100);
+        let market_value = position.quantity * quote.price;
+        let unrealized_pnl = market_value - position.invested;
+        let unrealized_pnl_pct = if position.invested.is_zero() {
+            Decimal::ZERO
+        } else {
+            unrealized_pnl / position.invested * hundred
+        };
+        let day_change_pct = if quote.prev_close.is_zero() {
+            Decimal::ZERO
+        } else {
+            (quote.price - quote.prev_close) / quote.prev_close * hundred
+        };
+        Valuation { market_value, unrealized_pnl, unrealized_pnl_pct, day_change_pct }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,5 +150,35 @@ mod tests {
             trade(2, Side::Sell, "20", "11.00", "0", 2),
         ];
         assert!(matches!(Position::from_trades(&asset, &trades), Err(PnlError::Oversell { .. })));
+    }
+
+    #[test]
+    fn valuation_basic() {
+        use crate::core::types::Quote;
+        use chrono::NaiveDate;
+        let asset = AssetId::b3("PETR4");
+        let pos = Position {
+            asset: asset.clone(),
+            quantity: dec!(100),
+            avg_cost: dec!(10.00),
+            invested: dec!(1000.00),
+            realized_pnl: dec!(0),
+        };
+        let quote = Quote {
+            asset,
+            price: dec!(12.00),
+            prev_close: dec!(11.00),
+            day_high: dec!(12.50),
+            day_low: dec!(10.90),
+            currency: "BRL".into(),
+            source: "test".into(),
+            fetched_at: NaiveDate::from_ymd_opt(2026, 1, 2).unwrap().and_hms_opt(12, 0, 0).unwrap(),
+        };
+        let v = Valuation::compute(&pos, &quote);
+        assert_eq!(v.market_value, dec!(1200.00));
+        assert_eq!(v.unrealized_pnl, dec!(200.00));
+        assert_eq!(v.unrealized_pnl_pct, dec!(20));   // 200/1000 * 100
+        // (12 - 11)/11 * 100
+        assert_eq!(v.day_change_pct.round_dp(4), dec!(9.0909));
     }
 }
