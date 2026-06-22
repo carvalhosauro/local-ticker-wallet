@@ -30,3 +30,17 @@ thiserror = "1"
 [dev-dependencies]
 wiremock = "0.6"
 tempfile = "3"
+
+[workspace.metadata.dist]
+cargo-dist-version = "0.32.0"
+ci = "github"
+installers = ["shell", "homebrew"]
+tap = "carvalhosauro/homebrew-tap"
+targets = [
+  "x86_64-unknown-linux-gnu",
+  "aarch64-unknown-linux-gnu",
+  "x86_64-apple-darwin",
+  "aarch64-apple-darwin",
+]
+pr-run-mode = "plan"
+create-release = true
