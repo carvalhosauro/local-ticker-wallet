@@ -117,13 +117,9 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
         KeyCode::Up => {
             app.search_selected = app.search_selected.saturating_sub(1);
         }
-        KeyCode::Enter => {
-            // Phase 2: open Add Transaction modal with selected symbol.
+        KeyCode::Enter | KeyCode::Char('a') => {
             if let Some(row) = data.search_results.get(app.search_selected) {
-                app.show_toast(Toast::info(format!(
-                    "{} — add trade (phase 2)",
-                    row.symbol
-                )));
+                app.open_add_transaction(Some(row.symbol.clone()), None);
             }
         }
         _ => {}

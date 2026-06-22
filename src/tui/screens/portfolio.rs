@@ -81,6 +81,16 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
             }
         }
         KeyCode::Char('o') => app.sort_by_score = !app.sort_by_score,
+        KeyCode::Char('a') => {
+            if let Some(row) = data.positions.get(app.portfolio_selected) {
+                app.open_add_transaction(
+                    Some(row.symbol.clone()),
+                    Some(row.avg_cost.to_string()),
+                );
+            } else {
+                app.open_add_transaction(None, None);
+            }
+        }
         KeyCode::Down => {
             if !data.positions.is_empty() {
                 app.portfolio_selected = (app.portfolio_selected + 1).min(data.positions.len() - 1);

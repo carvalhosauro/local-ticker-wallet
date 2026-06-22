@@ -63,6 +63,23 @@ pub struct Bundle {
     // Side labels
     pub side_buy: &'static str,
     pub side_sell: &'static str,
+    // Add transaction modal
+    pub add_tx_title: &'static str,
+    pub add_tx_label_symbol: &'static str,
+    pub add_tx_label_side: &'static str,
+    pub add_tx_label_quantity: &'static str,
+    pub add_tx_label_price: &'static str,
+    pub add_tx_label_date: &'static str,
+    pub add_tx_label_fees: &'static str,
+    pub add_tx_label_note: &'static str,
+    pub add_tx_footer: &'static str,
+    pub add_tx_success: &'static str,
+    pub add_tx_err_symbol: &'static str,
+    pub add_tx_err_quantity: &'static str,
+    pub add_tx_err_price: &'static str,
+    pub add_tx_err_fees: &'static str,
+    pub add_tx_err_date: &'static str,
+    pub add_tx_err_submit: &'static str,
     // Errors / status
     pub err_fetch_positions: &'static str,
     pub err_fetch_detail: &'static str,
