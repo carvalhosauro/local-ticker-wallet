@@ -82,7 +82,9 @@ pub fn import_csv(db: &Db, path: &str, weights: &ScoreWeights) -> anyhow::Result
         count += 1;
     }
     for a in &touched {
-        let _ = recompute_asset(db, a, weights);
+        if let Err(e) = recompute_asset(db, a, weights) {
+            eprintln!("warn: import_csv: recompute {} failed: {e}", a.symbol);
+        }
     }
     Ok(count)
 }
