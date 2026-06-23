@@ -42,7 +42,7 @@ cargo clippy --all-targets -- -D warnings
 
 CI runs on every push and pull request — see `.github/workflows/ci.yml`.
 
-PR labels (`feature`, `fix`, `documentation`, …) feed the [Release Drafter](https://github.com/release-drafter/release-drafter) preview on the draft GitHub Release.
+PR labels (`feature`, `fix`, `documentation`, …) are used by [Release Drafter](https://github.com/release-drafter/release-drafter) to group changes in the draft GitHub Release after merge to `main`.
 
 ## Code organization
 

@@ -27,15 +27,6 @@ version-resolver:
     - breaking
   default: patch
 
-autolabeler:
-  - label: documentation
-    files:
-      - '**/*.md'
-      - docs/**
-  - label: ci
-    files:
-      - .github/**
-
 template: |
   ## Install
 

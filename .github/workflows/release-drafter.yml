@@ -1,10 +1,10 @@
 name: Release Drafter
 
+# Runs only on main after merge. Release Drafter loads .github/release-drafter.yml
+# from the default branch via the API — it cannot run on PRs before that file exists on main.
 on:
   push:
     branches: [main]
-  pull_request:
-    types: [opened, reopened, synchronize]
 
 permissions:
   contents: read
@@ -15,8 +15,10 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-      pull-requests: write
+      pull-requests: read
     steps:
-      - uses: release-drafter/release-drafter@v6
+      - uses: release-drafter/release-drafter@v7
+        with:
+          config-name: release-drafter.yml
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
