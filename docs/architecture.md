@@ -138,4 +138,12 @@ Releases are automated with [cargo-dist](https://github.com/axodotdev/cargo-dist
 | [APT](https://carvalhosauro.github.io/local-ticker-wallet/) | `sudo apt install ltw` (Debian/Ubuntu, amd64 + arm64) |
 | [Homebrew tap](https://github.com/carvalhosauro/homebrew-tap) | `brew install carvalhosauro/tap/ltw` |
 
-Configuration lives in `Cargo.toml` under `[workspace.metadata.dist]`. Debian packages are built with [nfpm](https://nfpm.goreleaser.com/) in `.github/workflows/publish-apt.yml` and published to GitHub Pages.
+Configuration lives in `Cargo.toml` under `[workspace.metadata.dist]`. Release notes come from `CHANGELOG.md`. Debian packages are built with [nfpm](https://nfpm.goreleaser.com/) in `.github/workflows/publish-apt.yml` and published to GitHub Pages. See [docs/releasing.md](releasing.md) for the full maintainer workflow.
+
+### Release Drafter
+
+A draft GitHub Release is updated automatically on each merge to `main`, grouping merged PRs by label. Use it as a **preview** when writing `CHANGELOG.md`. The official versioned release is created by cargo-dist when you push a `vX.Y.Z` tag.
+
+### Validate tag
+
+`validate-tag.yml` runs on every `v*` tag push and fails if the tag does not match `Cargo.toml` `version`.

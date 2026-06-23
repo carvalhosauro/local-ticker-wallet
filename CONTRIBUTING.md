@@ -36,10 +36,13 @@ cargo clippy --all-targets -- -D warnings
 
 1. Fork and create a branch from `main`.
 2. Make focused changes with clear commit messages.
-3. Ensure `cargo clippy --all-targets` and `cargo nextest run --lib --test daemon_ipc` pass.
-4. Open a pull request describing what changed and why.
+3. Update `CHANGELOG.md` under `[Unreleased]` for user-facing changes.
+4. Ensure `cargo clippy --all-targets` and `cargo nextest run --lib --test daemon_ipc` pass.
+5. Open a pull request — the template includes a changelog checklist.
 
 CI runs on every push and pull request — see `.github/workflows/ci.yml`.
+
+PR labels (`feature`, `fix`, `documentation`, …) feed the [Release Drafter](https://github.com/release-drafter/release-drafter) preview on the draft GitHub Release.
 
 ## Code organization
 
@@ -55,19 +58,30 @@ Include OS, Rust version (`rustc --version`), how you invoked `ltw`, and relevan
 
 ## Releasing (maintainers)
 
-Pushing a semver git tag (e.g. `v0.1.0`) triggers the Release workflow. Required repository secrets:
+Full guide: **[docs/releasing.md](docs/releasing.md)**
+
+Quick summary:
+
+1. Edit `CHANGELOG.md` (`[Unreleased]` → new `[X.Y.Z]` section)
+2. `cargo release X.Y.Z --execute --no-publish` (bumps version, tags `vX.Y.Z`, pushes)
+3. CI builds binaries and publishes to GitHub Releases, crates.io, Homebrew, APT
+
+Required repository secrets:
 
 | Secret | Purpose |
 |--------|---------|
 | `CARGO_REGISTRY_TOKEN` | Publish `ltw` to [crates.io](https://crates.io/crates/ltw) |
 | `HOMEBREW_TAP_TOKEN` | Push Homebrew formula to `carvalhosauro/homebrew-tap` |
 
-Also enable **GitHub Pages** (source: GitHub Actions) so the APT repository is served at `https://carvalhosauro.github.io/local-ticker-wallet/`.
+Also enable **GitHub Pages** (source: GitHub Actions) for the APT repository.
 
-Dry-run the release plan locally:
+The Release Drafter workflow maintains a **draft** GitHub Release with merged PR summaries — use it as a reference when writing `CHANGELOG.md`. The official release is created by cargo-dist when the git tag is pushed.
+
+Dry-run locally:
 
 ```bash
-cargo dist plan
+cargo release X.Y.Z --dry-run
+cargo dist plan --tag=vX.Y.Z
 ```
 
 ## License

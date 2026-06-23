@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/carvalhosauro/local-ticker-wallet/actions/workflows/ci.yml/badge.svg)](https://github.com/carvalhosauro/local-ticker-wallet/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/ltw.svg)](https://crates.io/crates/ltw)
+[![GitHub release](https://img.shields.io/github/v/release/carvalhosauro/local-ticker-wallet?include_prereleases&display_name=tag)](https://github.com/carvalhosauro/local-ticker-wallet/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
 A terminal-first personal stock wallet for tracking B3 (Brazilian) equities. Record your trades locally, poll market data in the background, and review positions, P&L, and opportunity scores in a fast TUI — or via a thin CLI.
@@ -75,7 +76,10 @@ For scripts, start the daemon explicitly (see [installation](docs/installation.m
 | Installation & configuration | [docs/installation.md](docs/installation.md) |
 | Features & CLI reference | [docs/features.md](docs/features.md) |
 | Architecture & design choices | [docs/architecture.md](docs/architecture.md) |
-| Contributing & releasing | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Releases & versioning | [docs/releasing.md](docs/releasing.md) |
+| Changelog | [CHANGELOG.md](CHANGELOG.md) |
+| Contributing | [CONTRIBUTING.md](CONTRIBUTING.md) |
+| Security | [SECURITY.md](SECURITY.md) |
 
 ## Project status
 

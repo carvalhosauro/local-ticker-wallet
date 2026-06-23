@@ -1,0 +1,72 @@
+name: Bug report
+description: Report something that is broken or incorrect
+title: "[bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! Include enough detail that we can reproduce the issue.
+
+  - type: input
+    id: version
+    attributes:
+      label: ltw version
+      description: Release tag (e.g. v0.1.0) or how you installed (apt, brew, cargo install, source)
+      placeholder: "v0.1.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: install-method
+    attributes:
+      label: Install method
+      options:
+        - apt
+        - Homebrew
+        - curl installer
+        - cargo install
+        - built from source
+        - other
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: OS / architecture
+      placeholder: "Ubuntu 24.04 amd64, macOS 15 arm64, …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. ltw daemon >/tmp/ltw-daemon.log 2>&1 &
+        2. ltw add PETR4 1 1.00 --date 2026-01-01
+        3. …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Daemon log (`/tmp/ltw-daemon.log`) or terminal output
+      render: shell

@@ -12,6 +12,12 @@ keywords = ["stocks", "portfolio", "tui", "b3", "finance", "cli"]
 categories = ["command-line-utilities", "finance"]
 authors = ["carvalhosauro"]
 
+[package.metadata.release]
+# crates.io is published by CI on tag push — avoid double publish
+publish = false
+tag-name = "v{{version}}"
+pre-release-commit-message = "chore(release): ltw {{version}}"
+
 [lib]
 name = "local_ticker_wallet"
 path = "src/lib.rs"

@@ -1,0 +1,58 @@
+# Standard labels — synced to GitHub on push to main.
+# See .github/workflows/sync-labels.yml
+
+- name: bug
+  color: d73a4a
+  description: Something isn't working
+
+- name: enhancement
+  color: a2eeef
+  description: New feature or improvement
+
+- name: feature
+  color: 0e8a16
+  description: User-facing feature (changelog)
+
+- name: fix
+  color: 1d76db
+  description: Bug fix (changelog)
+
+- name: documentation
+  color: 0075ca
+  description: Documentation only
+
+- name: docs
+  color: 0075ca
+  description: Alias for documentation
+
+- name: chore
+  color: cfd3d7
+  description: Maintenance, tooling, refactors
+
+- name: ci
+  color: 1d76db
+  description: CI/CD changes
+
+- name: dependencies
+  color: 0366d6
+  description: Dependency updates (Dependabot)
+
+- name: breaking
+  color: b60205
+  description: Breaking change — semver major
+
+- name: skip-changelog
+  color: e4e669
+  description: Exclude from release notes
+
+- name: duplicate
+  color: cfd3d7
+  description: Duplicate issue
+
+- name: invalid
+  color: e4e669
+  description: Invalid report
+
+- name: wontfix
+  color: ffffff
+  description: Will not be addressed
