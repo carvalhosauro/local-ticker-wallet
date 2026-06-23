@@ -56,6 +56,17 @@ impl Toast {
 
 use std::time::{Duration, Instant};
 
+use tokio::task::JoinHandle;
+
+use crate::tui::models::{SearchPreview, SearchResultRow};
+
+/// In-flight asset search (IPC + provider lookup).
+pub type SearchFetchHandle =
+    JoinHandle<(u64, String, anyhow::Result<Vec<SearchResultRow>>)>;
+
+/// In-flight quote preview fetch for the search panel.
+pub type PreviewFetchHandle = JoinHandle<(u64, String, anyhow::Result<SearchPreview>)>;
+
 /// Central TUI state.
 pub struct App {
     pub locale: Locale,
@@ -73,6 +84,14 @@ pub struct App {
     pub search_preview_pending: bool,
     pub search_preview_deadline: Option<Instant>,
     pub search_preview_symbol: Option<String>,
+    /// Monotonic id; stale background search tasks are ignored when this differs.
+    pub search_fetch_gen: u64,
+    pub search_inflight: Option<SearchFetchHandle>,
+    /// Monotonic id; stale background preview tasks are ignored when this differs.
+    pub preview_fetch_gen: u64,
+    pub preview_inflight: Option<PreviewFetchHandle>,
+    /// Symbol currently being fetched for the preview panel (shows spinner).
+    pub preview_loading_symbol: Option<String>,
     pub overlay: Option<Overlay>,
 }
 
@@ -94,8 +113,24 @@ impl App {
             search_preview_pending: false,
             search_preview_deadline: None,
             search_preview_symbol: None,
+            search_fetch_gen: 0,
+            search_inflight: None,
+            preview_fetch_gen: 0,
+            preview_inflight: None,
+            preview_loading_symbol: None,
             overlay: None,
         }
+    }
+
+    pub fn invalidate_search_fetch(&mut self) {
+        self.search_fetch_gen = self.search_fetch_gen.wrapping_add(1);
+        self.search_inflight = None;
+    }
+
+    pub fn invalidate_preview_fetch(&mut self) {
+        self.preview_fetch_gen = self.preview_fetch_gen.wrapping_add(1);
+        self.preview_inflight = None;
+        self.preview_loading_symbol = None;
     }
 
     pub fn schedule_search(&mut self, debounce: Duration) {
