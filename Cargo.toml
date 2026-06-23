@@ -43,7 +43,7 @@ uuid = { version = "1", features = ["v4"] }
 sha2 = "0.10"
 directories = "5"
 anyhow = "1"
-thiserror = "1"
+thiserror = "2"
 
 [dev-dependencies]
 wiremock = "0.6"
