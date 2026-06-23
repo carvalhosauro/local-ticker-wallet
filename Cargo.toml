@@ -41,7 +41,7 @@ chrono-tz = "0.10"
 clap = { version = "4", features = ["derive"] }
 uuid = { version = "1", features = ["v4"] }
 sha2 = "0.10"
-directories = "5"
+directories = "6"
 anyhow = "1"
 thiserror = "1"
 
