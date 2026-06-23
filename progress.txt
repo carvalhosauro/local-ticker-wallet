@@ -1,6 +1,0 @@
-# local-ticker-wallet Ralph Progress
-
-## Session 2026-06-21
-- Started Ralph implementation from plan docs/superpowers/plans/2026-06-21-local-ticker-wallet.md
-- Project was docs-only; no Rust code existed
-- Created refined prd.json with 17 user stories matching plan tasks

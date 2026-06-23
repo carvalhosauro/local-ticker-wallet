@@ -1,0 +1,43 @@
+name: Feature request
+description: Suggest a new feature or improvement
+title: "[feature]: "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the problem you want solved. Check [open issues](https://github.com/carvalhosauro/local-ticker-wallet/issues) first.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: What pain point does this address?
+      placeholder: "I want to track FIIs but the wallet only supports B3 stocks today."
+    validations:
+      required: true
+
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+      description: How would you like it to work?
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you've thought about
+
+  - type: checkboxes
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - label: CLI
+        - label: TUI
+        - label: Daemon / market data
+        - label: Storage / export
+        - label: Documentation

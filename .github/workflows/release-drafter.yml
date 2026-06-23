@@ -1,0 +1,24 @@
+name: Release Drafter
+
+# Runs only on main after merge. Release Drafter loads .github/release-drafter.yml
+# from the default branch via the API — it cannot run on PRs before that file exists on main.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  update_release_draft:
+    if: github.repository == 'carvalhosauro/local-ticker-wallet'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: release-drafter/release-drafter@v7
+        with:
+          config-name: release-drafter.yml
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

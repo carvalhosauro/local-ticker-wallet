@@ -1,0 +1,18 @@
+# nfpm template — VERSION and ARCH are substituted by build-debs.sh
+name: ltw
+arch: "${ARCH}"
+platform: linux
+version: "${VERSION}"
+section: utils
+priority: optional
+maintainer: "carvalhosauro <https://github.com/carvalhosauro>"
+description: |
+  Local TUI stock wallet for B3 assets.
+  Terminal-first portfolio tracker with background market-data polling.
+homepage: "https://github.com/carvalhosauro/local-ticker-wallet"
+license: MIT
+contents:
+  - src: ./ltw
+    dst: /usr/bin/ltw
+    file_info:
+      mode: 0755

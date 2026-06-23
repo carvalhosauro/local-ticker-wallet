@@ -1,0 +1,23 @@
+name: Validate release tag
+
+# Ensures git tag version matches Cargo.toml before cargo-dist runs.
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag matches Cargo.toml
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          cargo_ver="$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -1)"
+          if [[ "$tag" != "$cargo_ver" ]]; then
+            echo "::error::Tag ${GITHUB_REF_NAME} (version ${tag}) does not match Cargo.toml (${cargo_ver})"
+            exit 1
+          fi
+          echo "Tag ${GITHUB_REF_NAME} matches Cargo.toml version ${cargo_ver}"
