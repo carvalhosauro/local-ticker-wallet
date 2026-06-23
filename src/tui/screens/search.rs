@@ -158,7 +158,7 @@ fn render_preview_panel(
                 Style::default().fg(Color::DarkGray),
             )),
         ]
-    } else if app.search_preview_pending || results.get(selected).is_some() {
+    } else if preview_is_loading(app, results, selected) {
         vec![Line::from(b.search_preview_loading)]
     } else {
         vec![Line::from(b.search_preview_select)]
@@ -193,6 +193,16 @@ fn truncate_name(name: &str, max: usize) -> String {
     }
 }
 
+fn preview_is_loading(app: &App, results: &[SearchResultRow], selected: usize) -> bool {
+    if app.search_preview_pending {
+        return true;
+    }
+    let Some(row) = results.get(selected) else {
+        return false;
+    };
+    app.preview_loading_symbol.as_deref() == Some(row.symbol.as_str())
+}
+
 pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyOutcome {
     match code {
         KeyCode::Esc => {
@@ -201,6 +211,8 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
             data.search_results.clear();
             data.search_preview = None;
             app.clear_search_preview_schedule();
+            app.invalidate_search_fetch();
+            app.invalidate_preview_fetch();
         }
         KeyCode::Backspace => {
             app.search_query.pop();
@@ -208,6 +220,8 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
             data.search_preview = None;
             app.search_selected = 0;
             app.clear_search_preview_schedule();
+            app.invalidate_search_fetch();
+            app.invalidate_preview_fetch();
             app.schedule_search(SEARCH_DEBOUNCE);
         }
         KeyCode::Char(c) if !c.is_control() => {
@@ -216,17 +230,23 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
             data.search_preview = None;
             app.search_selected = 0;
             app.clear_search_preview_schedule();
+            app.invalidate_search_fetch();
+            app.invalidate_preview_fetch();
             app.schedule_search(SEARCH_DEBOUNCE);
         }
         KeyCode::Down => {
             if !data.search_results.is_empty() {
                 app.search_selected = (app.search_selected + 1).min(data.search_results.len() - 1);
+                data.search_preview = None;
+                app.invalidate_preview_fetch();
                 schedule_preview_for_selection(app, data);
             }
         }
         KeyCode::Up => {
             if !data.search_results.is_empty() {
                 app.search_selected = app.search_selected.saturating_sub(1);
+                data.search_preview = None;
+                app.invalidate_preview_fetch();
                 schedule_preview_for_selection(app, data);
             }
         }
@@ -251,13 +271,109 @@ fn schedule_preview_for_selection(app: &mut App, data: &UiData) {
     }
 }
 
-/// Runs debounced provider search and quote preview fetches.
+/// Runs debounced provider search and quote preview fetches without blocking the UI loop.
 pub async fn tick(app: &mut App, data: &mut UiData) {
-    tick_search(app, data).await;
-    tick_preview(app, data).await;
+    poll_search_fetch(app, data).await;
+    poll_preview_fetch(app, data).await;
+    maybe_start_search_fetch(app);
+    maybe_start_preview_fetch(app, data);
 }
 
-async fn tick_search(app: &mut App, data: &mut UiData) {
+async fn poll_search_fetch(app: &mut App, data: &mut UiData) {
+    let finished = app
+        .search_inflight
+        .as_ref()
+        .is_some_and(tokio::task::JoinHandle::is_finished);
+    if !finished {
+        return;
+    }
+    let Some(handle) = app.search_inflight.take() else {
+        return;
+    };
+    let (gen, query, result) = match handle.await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("search fetch task panicked: {e}");
+            return;
+        }
+    };
+
+    if gen != app.search_fetch_gen {
+        return;
+    }
+
+    match result {
+        Ok(mut results) => {
+            client::mark_portfolio_hits(&mut results, &data.positions);
+            client::sort_search_results(&mut results);
+            data.search_results = results;
+            if app.search_selected >= data.search_results.len() {
+                app.search_selected = data.search_results.len().saturating_sub(1);
+            }
+            if !data.search_results.is_empty() {
+                data.search_preview = None;
+                app.invalidate_preview_fetch();
+                schedule_preview_for_selection(app, data);
+            } else {
+                data.search_preview = None;
+            }
+        }
+        Err(e) => {
+            if query == app.search_query {
+                data.search_results.clear();
+                data.search_preview = None;
+                app.show_toast(Toast::error(format!("{}: {e}", app.bundle.err_search)));
+            }
+        }
+    }
+}
+
+async fn poll_preview_fetch(app: &mut App, data: &mut UiData) {
+    let finished = app
+        .preview_inflight
+        .as_ref()
+        .is_some_and(tokio::task::JoinHandle::is_finished);
+    if !finished {
+        return;
+    }
+    let Some(handle) = app.preview_inflight.take() else {
+        return;
+    };
+    let (gen, symbol, result) = match handle.await {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("preview fetch task panicked: {e}");
+            app.preview_loading_symbol = None;
+            return;
+        }
+    };
+
+    app.preview_loading_symbol = None;
+
+    if gen != app.preview_fetch_gen {
+        return;
+    }
+
+    match result {
+        Ok(preview) => {
+            if app.search_preview_symbol.as_deref() == Some(symbol.as_str()) {
+                data.search_preview = Some(preview);
+            }
+        }
+        Err(e) => {
+            data.search_preview = None;
+            app.show_toast(Toast::error(format!(
+                "{}: {e}",
+                app.bundle.search_preview_err
+            )));
+        }
+    }
+}
+
+fn maybe_start_search_fetch(app: &mut App) {
+    if app.search_inflight.is_some() {
+        return;
+    }
     if !app.search_pending {
         return;
     }
@@ -271,34 +387,21 @@ async fn tick_search(app: &mut App, data: &mut UiData) {
     app.search_pending = false;
     let query = app.search_query.clone();
     if query.is_empty() {
-        data.search_results.clear();
-        data.search_preview = None;
         return;
     }
 
-    match client::search_assets(&query).await {
-        Ok(mut results) => {
-            client::mark_portfolio_hits(&mut results, &data.positions);
-            client::sort_search_results(&mut results);
-            data.search_results = results;
-            if app.search_selected >= data.search_results.len() {
-                app.search_selected = data.search_results.len().saturating_sub(1);
-            }
-            if !data.search_results.is_empty() {
-                schedule_preview_for_selection(app, data);
-            } else {
-                data.search_preview = None;
-            }
-        }
-        Err(e) => {
-            data.search_results.clear();
-            data.search_preview = None;
-            app.show_toast(Toast::error(format!("{}: {e}", app.bundle.err_search)));
-        }
-    }
+    app.search_fetch_gen = app.search_fetch_gen.wrapping_add(1);
+    let gen = app.search_fetch_gen;
+    app.search_inflight = Some(tokio::spawn(async move {
+        let result = client::search_assets(&query).await;
+        (gen, query, result)
+    }));
 }
 
-async fn tick_preview(app: &mut App, data: &mut UiData) {
+fn maybe_start_preview_fetch(app: &mut App, data: &UiData) {
+    if app.preview_inflight.is_some() {
+        return;
+    }
     if !app.search_preview_pending {
         return;
     }
@@ -314,25 +417,17 @@ async fn tick_preview(app: &mut App, data: &mut UiData) {
         return;
     };
 
-    let Some(row) = data
-        .search_results
-        .iter()
-        .find(|r| r.symbol == symbol)
-        .cloned()
-    else {
+    let Some(row) = data.search_results.iter().find(|r| r.symbol == symbol).cloned() else {
         return;
     };
 
-    match client::fetch_quote_preview(&row).await {
-        Ok(preview) => data.search_preview = Some(preview),
-        Err(e) => {
-            data.search_preview = None;
-            app.show_toast(Toast::error(format!(
-                "{}: {e}",
-                app.bundle.search_preview_err
-            )));
-        }
-    }
+    app.preview_fetch_gen = app.preview_fetch_gen.wrapping_add(1);
+    let gen = app.preview_fetch_gen;
+    app.preview_loading_symbol = Some(symbol.clone());
+    app.preview_inflight = Some(tokio::spawn(async move {
+        let result = client::fetch_quote_preview(&row).await;
+        (gen, symbol, result)
+    }));
 }
 
 #[cfg(test)]
@@ -342,6 +437,24 @@ mod tests {
     use crate::tui::app::App;
     use ratatui::{backend::TestBackend, Terminal};
     use rust_decimal_macros::dec;
+
+    #[test]
+    fn preview_loading_only_while_fetch_inflight() {
+        let mut app = App::new(Locale::En);
+        let results = vec![SearchResultRow {
+            symbol: "BBAS3".into(),
+            name: "Brasil".into(),
+            kind: "EQUITY".into(),
+            currency: "BRL".into(),
+            in_portfolio: false,
+        }];
+        assert!(!preview_is_loading(&app, &results, 0));
+        app.preview_loading_symbol = Some("BBAS3".into());
+        assert!(preview_is_loading(&app, &results, 0));
+        app.preview_loading_symbol = None;
+        app.search_preview_pending = true;
+        assert!(preview_is_loading(&app, &results, 0));
+    }
 
     #[test]
     fn renders_search_with_preview_panel() {
