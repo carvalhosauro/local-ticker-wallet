@@ -15,6 +15,8 @@ pub fn render(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &App
         Screen::Detail => {
             if let Some(detail) = &data.detail {
                 detail::render(frame, area, app, detail);
+            } else {
+                detail::render_unavailable(frame, area, app);
             }
         }
         Screen::Search => search::render(
@@ -30,9 +32,6 @@ pub fn render(frame: &mut ratatui::Frame, area: ratatui::layout::Rect, app: &App
 
 pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyOutcome {
     if app.has_overlay() {
-        if matches!(code, KeyCode::Char('q')) {
-            return KeyOutcome::Quit;
-        }
         return crate::tui::overlays::handle_key(app, data, code).await;
     }
 

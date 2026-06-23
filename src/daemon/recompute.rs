@@ -2,9 +2,24 @@ use crate::config::ScoreWeights;
 use crate::core::{
     pnl::{Position, Valuation},
     score,
-    types::AssetId,
+    types::{AssetId, Trade},
 };
 use crate::storage::{db::Db, queries::PositionSnapshot};
+use rust_decimal::Decimal;
+
+/// Rejects invalid trades before they are persisted (oversell, non-positive price/qty).
+pub fn validate_trade(db: &Db, trade: &Trade) -> anyhow::Result<()> {
+    if trade.price <= Decimal::ZERO {
+        anyhow::bail!("price must be greater than zero");
+    }
+    if trade.quantity <= Decimal::ZERO {
+        anyhow::bail!("quantity must be greater than zero");
+    }
+    let mut trades = db.list_transactions(Some(&trade.asset))?;
+    trades.push(trade.clone());
+    Position::from_trades(&trade.asset, &trades)?;
+    Ok(())
+}
 
 pub fn recompute_asset(
     db: &Db,

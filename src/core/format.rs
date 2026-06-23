@@ -80,10 +80,22 @@ pub fn format_price(value: Decimal, locale: FormatLocale) -> String {
     format_fixed(value, places, locale)
 }
 
-/// Monetary amount with currency prefix.
+/// Monetary amount with the UI locale currency prefix.
 pub fn format_money(value: Decimal, locale: FormatLocale) -> String {
     let sign = if value.is_sign_negative() { "-" } else { "" };
     format!("{}{}{}", sign, locale.currency_prefix, format_fixed(value.abs(), 2, locale))
+}
+
+/// Monetary amount using the asset's currency (not the UI locale).
+pub fn format_money_for_currency(value: Decimal, currency: &str, locale: FormatLocale) -> String {
+    let sign = if value.is_sign_negative() { "-" } else { "" };
+    let body = format_fixed(value.abs(), 2, locale);
+    let prefix = match currency {
+        "BRL" => "R$ ",
+        "USD" => "$",
+        other => return format!("{sign}{other} {body}"),
+    };
+    format!("{sign}{prefix}{body}")
 }
 
 /// Signed percentage with `%` suffix.
@@ -154,6 +166,11 @@ mod tests {
     fn format_pct_en() {
         assert_eq!(format_pct(dec!(1.25), EN), "+1.25%");
         assert_eq!(format_pct(dec!(-3.4), EN), "-3.40%");
+    }
+
+    #[test]
+    fn format_money_en_brl_uses_real_prefix() {
+        assert_eq!(format_money_for_currency(dec!(4700.40), "BRL", EN), "R$ 4,700.40");
     }
 
     #[test]
