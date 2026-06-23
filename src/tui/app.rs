@@ -122,15 +122,28 @@ impl App {
         }
     }
 
+    pub fn invalidate_preview_fetch(&mut self) {
+        self.preview_fetch_gen = self.preview_fetch_gen.wrapping_add(1);
+        self.preview_inflight = None;
+        self.preview_loading_symbol = None;
+        self.clear_search_preview_schedule();
+    }
+
+    /// Bumps the preview generation and returns the id for a new in-flight fetch.
+    pub fn next_preview_fetch_gen(&mut self) -> u64 {
+        self.preview_fetch_gen = self.preview_fetch_gen.wrapping_add(1);
+        self.preview_fetch_gen
+    }
+
     pub fn invalidate_search_fetch(&mut self) {
         self.search_fetch_gen = self.search_fetch_gen.wrapping_add(1);
         self.search_inflight = None;
     }
 
-    pub fn invalidate_preview_fetch(&mut self) {
-        self.preview_fetch_gen = self.preview_fetch_gen.wrapping_add(1);
-        self.preview_inflight = None;
-        self.preview_loading_symbol = None;
+    /// Bumps the search generation and returns the id for a new in-flight fetch.
+    pub fn next_search_fetch_gen(&mut self) -> u64 {
+        self.search_fetch_gen = self.search_fetch_gen.wrapping_add(1);
+        self.search_fetch_gen
     }
 
     pub fn schedule_search(&mut self, debounce: Duration) {

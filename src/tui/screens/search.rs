@@ -210,7 +210,6 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
             app.search_query.clear();
             data.search_results.clear();
             data.search_preview = None;
-            app.clear_search_preview_schedule();
             app.invalidate_search_fetch();
             app.invalidate_preview_fetch();
         }
@@ -219,7 +218,6 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
             data.search_results.clear();
             data.search_preview = None;
             app.search_selected = 0;
-            app.clear_search_preview_schedule();
             app.invalidate_search_fetch();
             app.invalidate_preview_fetch();
             app.schedule_search(SEARCH_DEBOUNCE);
@@ -229,7 +227,6 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
             data.search_results.clear();
             data.search_preview = None;
             app.search_selected = 0;
-            app.clear_search_preview_schedule();
             app.invalidate_search_fetch();
             app.invalidate_preview_fetch();
             app.schedule_search(SEARCH_DEBOUNCE);
@@ -277,6 +274,8 @@ pub async fn tick(app: &mut App, data: &mut UiData) {
     poll_preview_fetch(app, data).await;
     maybe_start_search_fetch(app);
     maybe_start_preview_fetch(app, data);
+    // Let spawned IPC tasks make progress while the main loop is in crossterm poll/read.
+    tokio::task::yield_now().await;
 }
 
 async fn poll_search_fetch(app: &mut App, data: &mut UiData) {
@@ -312,7 +311,7 @@ async fn poll_search_fetch(app: &mut App, data: &mut UiData) {
             }
             if !data.search_results.is_empty() {
                 data.search_preview = None;
-                app.invalidate_preview_fetch();
+                app.preview_inflight = None;
                 schedule_preview_for_selection(app, data);
             } else {
                 data.search_preview = None;
@@ -339,7 +338,7 @@ async fn poll_preview_fetch(app: &mut App, data: &mut UiData) {
     let Some(handle) = app.preview_inflight.take() else {
         return;
     };
-    let (gen, symbol, result) = match handle.await {
+    let (gen, _symbol, result) = match handle.await {
         Ok(v) => v,
         Err(e) => {
             eprintln!("preview fetch task panicked: {e}");
@@ -356,7 +355,11 @@ async fn poll_preview_fetch(app: &mut App, data: &mut UiData) {
 
     match result {
         Ok(preview) => {
-            if app.search_preview_symbol.as_deref() == Some(symbol.as_str()) {
+            let still_selected = data
+                .search_results
+                .get(app.search_selected)
+                .is_some_and(|r| r.symbol == preview.symbol);
+            if still_selected {
                 data.search_preview = Some(preview);
             }
         }
@@ -390,8 +393,7 @@ fn maybe_start_search_fetch(app: &mut App) {
         return;
     }
 
-    app.search_fetch_gen = app.search_fetch_gen.wrapping_add(1);
-    let gen = app.search_fetch_gen;
+    let gen = app.next_search_fetch_gen();
     app.search_inflight = Some(tokio::spawn(async move {
         let result = client::search_assets(&query).await;
         (gen, query, result)
@@ -412,18 +414,16 @@ fn maybe_start_preview_fetch(app: &mut App, data: &UiData) {
         return;
     }
 
+    let Some(row) = data.search_results.get(app.search_selected).cloned() else {
+        return;
+    };
+
     app.search_preview_pending = false;
-    let Some(symbol) = app.search_preview_symbol.clone() else {
-        return;
-    };
+    app.search_preview_symbol = Some(row.symbol.clone());
+    app.preview_loading_symbol = Some(row.symbol.clone());
 
-    let Some(row) = data.search_results.iter().find(|r| r.symbol == symbol).cloned() else {
-        return;
-    };
-
-    app.preview_fetch_gen = app.preview_fetch_gen.wrapping_add(1);
-    let gen = app.preview_fetch_gen;
-    app.preview_loading_symbol = Some(symbol.clone());
+    let gen = app.next_preview_fetch_gen();
+    let symbol = row.symbol.clone();
     app.preview_inflight = Some(tokio::spawn(async move {
         let result = client::fetch_quote_preview(&row).await;
         (gen, symbol, result)
@@ -437,6 +437,17 @@ mod tests {
     use crate::tui::app::App;
     use ratatui::{backend::TestBackend, Terminal};
     use rust_decimal_macros::dec;
+
+    #[test]
+    fn preview_fetch_gen_single_increment_per_spawn() {
+        let mut app = App::new(Locale::En);
+        assert_eq!(app.preview_fetch_gen, 0);
+        app.invalidate_preview_fetch();
+        assert_eq!(app.preview_fetch_gen, 1);
+        let g = app.next_preview_fetch_gen();
+        assert_eq!(g, 2);
+        assert_eq!(app.preview_fetch_gen, 2);
+    }
 
     #[test]
     fn preview_loading_only_while_fetch_inflight() {
