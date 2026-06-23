@@ -4,6 +4,7 @@ use ratatui::style::{Modifier, Style};
 use ratatui::widgets::{Block, Borders, Cell, Row, Table};
 
 use crate::core::format;
+use crate::core::types::AssetId;
 use crate::tui::app::{App, Screen, Toast};
 use crate::tui::client;
 use crate::tui::input::KeyOutcome;
@@ -30,6 +31,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &App, rows: &[Positio
         .iter()
         .enumerate()
         .map(|(i, r)| {
+            let currency = AssetId::b3(&r.symbol).currency();
             let style = if i == selected {
                 Style::default().add_modifier(Modifier::REVERSED)
             } else {
@@ -39,7 +41,7 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &App, rows: &[Positio
                 Cell::from(r.symbol.clone()),
                 Cell::from(format::format_quantity(r.quantity, fmt)),
                 Cell::from(format::format_price(r.avg_cost, fmt)),
-                Cell::from(format::format_money(r.market_value, fmt)),
+                Cell::from(format::format_money_for_currency(r.market_value, currency, fmt)),
                 Cell::from(format::format_pct(r.day_change_pct, fmt)),
                 Cell::from(format::format_pct(r.unrealized_pnl_pct, fmt)),
                 Cell::from(format::format_score(r.score))
@@ -58,7 +60,14 @@ pub fn render(frame: &mut ratatui::Frame, area: Rect, app: &App, rows: &[Positio
         Constraint::Length(9),
         Constraint::Length(6),
     ];
-    let title = format!("{} — {}", bundle.app_title, bundle.portfolio_footer);
+    let title = if app.sort_by_score {
+        format!(
+            "{} — {} · {}",
+            bundle.app_title, bundle.portfolio_sort_active, bundle.portfolio_footer
+        )
+    } else {
+        format!("{} — {}", bundle.app_title, bundle.portfolio_footer)
+    };
     let table = Table::new(body, widths)
         .header(header)
         .block(Block::default().borders(Borders::ALL).title(title));
@@ -80,7 +89,14 @@ pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyO
                 }
             }
         }
-        KeyCode::Char('o') => app.sort_by_score = !app.sort_by_score,
+        KeyCode::Char('o') => {
+            app.sort_by_score = !app.sort_by_score;
+            if !app.sort_by_score {
+                if let Ok(rows) = client::fetch_positions().await {
+                    data.positions = rows;
+                }
+            }
+        }
         KeyCode::Char('a') => {
             if let Some(row) = data.positions.get(app.portfolio_selected) {
                 app.open_add_transaction(
@@ -152,5 +168,23 @@ mod tests {
         let text = buffer_text(100, 12, |f| render(f, f.area(), &app, &rows));
         assert!(text.contains("PETR4"));
         assert!(text.contains("73"));
+        assert!(text.contains("R$ 1,200.00"));
+    }
+
+    #[test]
+    fn shows_sort_indicator_when_active() {
+        let mut app = App::new(Locale::En);
+        app.sort_by_score = true;
+        let rows = vec![PositionRow {
+            symbol: "PETR4".into(),
+            quantity: dec!(100),
+            avg_cost: dec!(10),
+            market_value: dec!(1200),
+            day_change_pct: dec!(1.5),
+            unrealized_pnl_pct: dec!(20),
+            score: 73,
+        }];
+        let text = buffer_text(100, 12, |f| render(f, f.area(), &app, &rows));
+        assert!(text.contains("sorted by score"));
     }
 }

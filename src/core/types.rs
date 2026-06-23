@@ -16,6 +16,13 @@ impl AssetId {
     pub fn yahoo_ticker(&self) -> String {
         if self.exchange == "BVMF" { format!("{}.SA", self.symbol) } else { self.symbol.clone() }
     }
+    /// ISO currency for display (BVMF → BRL).
+    pub fn currency(&self) -> &'static str {
+        match self.exchange.as_str() {
+            "BVMF" => "BRL",
+            _ => "USD",
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

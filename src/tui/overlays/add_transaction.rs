@@ -129,7 +129,7 @@ pub fn validate(form: &AddTransactionForm) -> Result<ValidatedTransaction, &'sta
     }
 
     let price: Decimal = normalize_decimal(&form.price).parse().map_err(|_| "price")?;
-    if price < Decimal::ZERO {
+    if price <= Decimal::ZERO {
         return Err("price");
     }
 
@@ -189,5 +189,22 @@ mod tests {
     fn validate_rejects_empty_symbol() {
         let form = AddTransactionForm::new(None, None);
         assert_eq!(validate(&form).unwrap_err(), "symbol");
+    }
+
+    #[test]
+    fn validate_rejects_zero_price() {
+        let form = AddTransactionForm {
+            symbol: "PETR4".into(),
+            side: Side::Buy,
+            quantity: "100".into(),
+            price: "0".into(),
+            date: "2026-01-02".into(),
+            fees: "0".into(),
+            note: String::new(),
+            focused: AddField::Symbol,
+            error: None,
+            replace_on_input: false,
+        };
+        assert_eq!(validate(&form).unwrap_err(), "price");
     }
 }

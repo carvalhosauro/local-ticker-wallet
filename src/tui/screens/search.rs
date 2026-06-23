@@ -142,7 +142,7 @@ fn render_preview_panel(
             Line::from(""),
             Line::from(vec![
                 Span::styled(b.search_preview_price, label),
-                Span::raw(format_money_for_currency(p.price, &p.currency, fmt)),
+                Span::raw(format::format_money_for_currency(p.price, &p.currency, fmt)),
             ]),
             Line::from(vec![
                 Span::styled(b.search_preview_day, label),
@@ -170,19 +170,6 @@ fn render_preview_panel(
             .title(format!(" {} ", b.search_preview_title)),
     );
     frame.render_widget(para, area);
-}
-
-fn format_money_for_currency(
-    price: rust_decimal::Decimal,
-    currency: &str,
-    fmt: format::FormatLocale,
-) -> String {
-    let formatted = format::format_price(price, fmt);
-    if currency == "BRL" {
-        format!("R$ {formatted}")
-    } else {
-        format!("{currency} {formatted}")
-    }
 }
 
 fn truncate_name(name: &str, max: usize) -> String {

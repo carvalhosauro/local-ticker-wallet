@@ -13,6 +13,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- Daemon rejects oversell and zero-price transactions before persisting (#10, #13, #17, #19)
+- TUI shows BRL amounts with `R$` in portfolio/detail regardless of UI locale (#12)
+- Status bar navigation tabs visible; portfolio sort indicator; detail load fallback (#11, #14, #18)
+- `q` cancels modals instead of quitting; disabling score sort restores daemon order (#15, #16)
+
 ### Removed
 
 ## [0.1.0] - 2026-06-22

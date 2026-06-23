@@ -5,6 +5,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 
 use crate::core::format::{self, FormatLocale};
+use crate::core::types::AssetId;
 use crate::tui::app::{App, Toast};
 use crate::tui::client;
 use crate::tui::input::KeyOutcome;
@@ -35,9 +36,10 @@ fn render_stats(
     fmt: FormatLocale,
 ) {
     let bundle = app.bundle;
+    let currency = AssetId::b3(&detail.symbol).currency();
     let pnl = format!(
         "{} ({})",
-        format::format_money(detail.unrealized_pnl, fmt),
+        format::format_money_for_currency(detail.unrealized_pnl, currency, fmt),
         format::format_pct(detail.unrealized_pnl_pct, fmt)
     );
     let lines = vec![
@@ -55,7 +57,9 @@ fn render_stats(
         ]),
         Line::from(vec![
             Span::styled(bundle.label_market_value, label),
-            Span::raw(format::format_money(detail.market_value, fmt)),
+            Span::raw(format::format_money_for_currency(
+                detail.market_value, currency, fmt,
+            )),
         ]),
         Line::from(vec![
             Span::styled(bundle.label_unrealized_pnl, label),
@@ -124,6 +128,16 @@ fn render_chart(frame: &mut ratatui::Frame, area: Rect, app: &App, detail: &Deta
     let lines = braille_chart::render_lines(&detail.chart_closes, chart_width, chart_height);
     let para = Paragraph::new(lines);
     frame.render_widget(para, inner);
+}
+
+pub fn render_unavailable(frame: &mut ratatui::Frame, area: Rect, app: &App) {
+    let bundle = app.bundle;
+    let para = Paragraph::new(bundle.detail_unavailable).block(
+        Block::default()
+            .borders(Borders::ALL)
+            .title(format!(" {} — {} ", bundle.detail_title, bundle.detail_footer)),
+    );
+    frame.render_widget(para, area);
 }
 
 pub async fn handle_key(app: &mut App, data: &mut UiData, code: KeyCode) -> KeyOutcome {
@@ -227,5 +241,12 @@ mod tests {
         detail.chart_closes.clear();
         let text = buffer_text(80, 24, |f| render(f, f.area(), &app, &detail));
         assert!(text.contains("No history"));
+    }
+
+    #[test]
+    fn renders_detail_unavailable_message() {
+        let app = App::new(Locale::En);
+        let text = buffer_text(80, 16, |f| render_unavailable(f, f.area(), &app));
+        assert!(text.contains("Failed to load detail"));
     }
 }

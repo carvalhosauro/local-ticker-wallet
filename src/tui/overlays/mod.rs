@@ -220,7 +220,7 @@ async fn handle_add_transaction_key(
     };
 
     match code {
-        KeyCode::Esc => {
+        KeyCode::Esc | KeyCode::Char('q') => {
             app.close_overlay();
             return KeyOutcome::Continue;
         }
@@ -262,7 +262,7 @@ async fn handle_confirm_delete_key(
     code: KeyCode,
 ) -> KeyOutcome {
     match code {
-        KeyCode::Esc => app.close_overlay(),
+        KeyCode::Esc | KeyCode::Char('q') => app.close_overlay(),
         KeyCode::Enter | KeyCode::Char('y') => return confirm_delete(app, data).await,
         _ => {}
     }
